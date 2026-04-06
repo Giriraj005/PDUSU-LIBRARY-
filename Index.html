@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDSU Digital Library — Shekhawati University</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -46,6 +47,11 @@
   window.approvePurchase=id=>updateDoc(doc(db,"purchases",id),{status:'approved'});
   window.loadPending=async()=>{ const s=await getDocs(query(collection(db,"purchases"),where("status","==","pending"))); return s.docs.map(d=>({id:d.id,...d.data()})); };
   window.uploadPDF=(file,onP)=>new Promise((res,rej)=>{ const nm=Date.now()+'_'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_'); const t=uploadBytesResumable(ref(stor,'books/'+nm),file); t.on('state_changed',s=>onP&&onP(Math.round(s.bytesTransferred/s.totalBytes*100)),rej,async()=>res(await getDownloadURL(t.snapshot.ref))); });
+  window.createCoupon=async d=>{ await addDoc(collection(db,'coupons'),{...d,usedCount:0,createdAt:new Date()}); };
+  window.loadCoupons=async()=>{ const s=await getDocs(collection(db,'coupons')); return s.docs.map(d=>({id:d.id,...d.data()})); };
+  window.deleteCoupon=id=>updateDoc(doc(db,'coupons',id),{active:false});
+  window.validateCoupon=async code=>{ const s=await getDocs(query(collection(db,'coupons'),where('code','==',code.toUpperCase()),where('active','==',true))); if(s.empty)return null; const d=s.docs[0]; const cp={id:d.id,...d.data()}; if(cp.maxUses>0&&cp.usedCount>=cp.maxUses)return null; return cp; };
+  window.useCoupon=async id=>{ const ref2=doc(db,'coupons',id); const s=await getDocs(query(collection(db,'coupons'))); const cp=s.docs.find(d=>d.id===id); if(cp)await updateDoc(ref2,{usedCount:(cp.data().usedCount||0)+1}); };
 </script>
 
 <style>
@@ -200,6 +206,66 @@ main{max-width:1200px;margin:0 auto;padding:2.5rem 2rem}
 .btn-mp{flex:2;padding:.82rem;background:var(--sf);border:none;border-radius:11px;color:#fff;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer;transition:all .2s;font-size:.86rem}
 .btn-mp:hover:not(:disabled){background:var(--sf-d)}
 .btn-mp:disabled{background:#ccc;cursor:not-allowed}
+
+
+
+/* COUPON SYSTEM */
+.coup-row{display:flex;gap:.5rem;margin-bottom:.55rem;align-items:stretch}
+.coup-in{flex:1;padding:.72rem .9rem;background:var(--cr);border:2px solid var(--cr-d);border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:.88rem;letter-spacing:2px;color:var(--ink);outline:none;transition:border-color .2s;text-transform:uppercase}
+.coup-in:focus{border-color:var(--sf);background:#fff}
+.coup-in.valid{border-color:var(--gn);background:var(--gn-l)}
+.coup-in.invalid{border-color:#9B2020;background:#fff5f5}
+.coup-apply{padding:.72rem 1.1rem;background:var(--mr);color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:.78rem;cursor:pointer;white-space:nowrap;transition:all .2s}
+.coup-apply:hover{background:var(--mr-d)}
+.coup-status{font-size:.74rem;font-weight:700;margin-bottom:.65rem;padding:.42rem .8rem;border-radius:8px;display:none;text-align:left}
+.coup-status.ok{background:var(--gn-l);color:var(--gn);border:1.5px solid #7EC8A0;display:block}
+.coup-status.err{background:#fff0f0;color:#9B2020;border:1.5px solid #f5b8b8;display:block}
+.disc-line{display:flex;justify-content:space-between;font-size:.78rem;font-weight:700;margin-bottom:.3rem}
+.disc-orig{color:var(--gy);text-decoration:line-through}
+.disc-save{color:var(--gn)}
+.disc-final{font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--sf)}
+/* Admin coupon panel */
+.cp-card{background:#fff;border:2px solid var(--cr-d);border-radius:14px;padding:1.1rem 1.2rem;margin-bottom:.75rem;display:flex;justify-content:space-between;align-items:center;gap:.75rem;transition:border-color .2s}
+.cp-card:hover{border-color:var(--sf)}
+.cp-code{font-family:'JetBrains Mono',monospace;font-size:1rem;font-weight:700;color:var(--mr);letter-spacing:2px}
+.cp-meta{font-size:.72rem;color:var(--gy);margin-top:.22rem}
+.cp-badge{padding:.18rem .6rem;border-radius:100px;font-size:.6rem;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.cp-pct{background:var(--sf-l);color:var(--sf-d)}
+.cp-flat{background:var(--gn-l);color:var(--gn)}
+.cp-del{padding:.42rem .9rem;background:var(--cr);border:1.5px solid var(--cr-d);border-radius:8px;color:var(--gy);font-family:'DM Sans',sans-serif;font-weight:700;font-size:.72rem;cursor:pointer;transition:all .2s}
+.cp-del:hover{border-color:#9B2020;color:#9B2020}
+.coup-form{background:var(--cr);border-radius:14px;padding:1.25rem;margin-bottom:1.5rem;border:1.5px solid var(--cr-d)}
+.coup-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+
+/* PREVIEW MODAL */
+.prev-mov{position:fixed;inset:0;background:rgba(10,5,0,.92);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:1100;padding:1rem;animation:fi .25s ease}
+.prev-mo{background:#fff;border-radius:24px;width:100%;max-width:560px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 40px 100px rgba(0,0,0,.5);animation:su .3s ease}
+.prev-hd{background:var(--mr);padding:1.1rem 1.4rem;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.prev-hd-info{flex:1;min-width:0}
+.prev-hd h3{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:900;color:var(--gd-l);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prev-hd p{font-size:.62rem;color:rgba(255,255,255,.5);margin:.15rem 0 0;letter-spacing:1px;text-transform:uppercase}
+.prev-close{background:rgba(255,255,255,.12);border:none;border-radius:50%;width:30px;height:30px;color:#fff;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:.75rem;transition:background .2s}
+.prev-close:hover{background:rgba(255,255,255,.25)}
+.prev-body{flex:1;overflow-y:auto;padding:1.25rem;position:relative}
+.prev-pages{display:flex;flex-direction:column;gap:1rem}
+.prev-pages canvas{width:100%;height:auto;border-radius:8px;border:1px solid var(--cr-d);display:block}
+.prev-html-content{font-size:.9rem;line-height:1.8;color:var(--ink-m)}
+.prev-html-content h1,.prev-html-content h2,.prev-html-content h3{font-family:'Playfair Display',serif;color:var(--mr);margin:1rem 0 .5rem}
+.prev-fade{position:sticky;bottom:0;left:0;right:0;height:160px;background:linear-gradient(to bottom,transparent,#fff 70%);pointer-events:none;margin-top:-160px}
+.prev-cta{background:#fff;padding:1rem 1.25rem;border-top:2px solid var(--cr-d);flex-shrink:0;text-align:center}
+.prev-cta p{font-size:.78rem;color:var(--gy);margin-bottom:.65rem}
+.prev-cta-btns{display:flex;gap:.6rem}
+.prev-cta-btns button{flex:1;padding:.75rem;border:none;border-radius:11px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:.84rem;cursor:pointer;transition:all .2s}
+.prev-buy{background:var(--sf);color:#fff}
+.prev-buy:hover{background:var(--sf-d)}
+.prev-cancel{background:var(--cr);border:2px solid var(--cr-d)!important;color:var(--gy)}
+.prev-cancel:hover{border-color:var(--mr)!important;color:var(--mr)}
+.prev-loader{text-align:center;padding:2.5rem;color:var(--gy)}
+.prev-spin{width:36px;height:36px;border:3px solid var(--cr-d);border-top-color:var(--sf);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 1rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+.prev-page-label{font-size:.62rem;font-weight:700;color:var(--gy);letter-spacing:1px;text-transform:uppercase;margin-bottom:.3rem}
+.bb-prev{background:transparent;color:var(--sf);border:1.5px solid var(--sf)!important}
+.bb-prev:hover{background:var(--sf-l)}
 
 /* ADMIN */
 .ag{max-width:400px;margin:4rem auto;background:#fff;border-radius:24px;padding:2.75rem;box-shadow:var(--sh-h);border:2px solid var(--cr-d);text-align:center}
@@ -363,7 +429,7 @@ footer strong{color:var(--sf)}
 
 <!-- MY BOOKS -->
 <div class="view" id="view-my-books">
-  <h2 class="ph">📖 My Books</h2>
+  <h2 class="ph">📖 Mere Books</h2>
   <p class="ps">Tumhara purchased aur unlocked content</p>
   <div class="mg" id="my-g"></div>
 </div>
@@ -386,6 +452,7 @@ footer strong{color:var(--sf)}
     <div class="at-row">
       <button class="at act" id="at-pay" onclick="swAT('pay')">💳 Payments</button>
       <button class="at" id="at-up" onclick="swAT('up')">📤 Book Upload</button>
+      <button class="at" id="at-coup" onclick="swAT('coup')">🎟️ Coupons</button>
     </div>
     <div id="adm-pay"><div id="pay-list"></div></div>
     <div id="adm-up" style="display:none">
@@ -448,6 +515,37 @@ footer strong{color:var(--sf)}
       </div>
     </div>
   </div>
+
+    <div id="adm-coup" style="display:none">
+      <div class="coup-form">
+        <h3 style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--mr);margin-bottom:1rem;font-weight:900">➕ Naya Coupon Banao</h3>
+        <div class="coup-form-grid">
+          <div class="fg" style="margin:0">
+            <label>Coupon Code</label>
+            <input type="text" id="cp-code" placeholder="EXAM2024" style="text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:2px" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')">
+          </div>
+          <div class="fg" style="margin:0">
+            <label>Discount Type</label>
+            <select id="cp-type">
+              <option value="percent">% Percent Off</option>
+              <option value="flat">₹ Flat Off</option>
+            </select>
+          </div>
+          <div class="fg" style="margin:0">
+            <label>Discount Value</label>
+            <input type="number" id="cp-val" placeholder="e.g. 20 (20% ya ₹20)" min="1" max="100">
+          </div>
+          <div class="fg" style="margin:0">
+            <label>Max Uses (0 = unlimited)</label>
+            <input type="number" id="cp-max" placeholder="0" min="0" value="0">
+          </div>
+        </div>
+        <button class="fbtn" style="margin-top:1rem;max-width:220px" onclick="doCreateCoupon()">🎟️ Coupon Banao</button>
+      </div>
+      <h3 style="font-family:'Playfair Display',serif;font-size:1rem;color:var(--mr);margin-bottom:.85rem;font-weight:900">📋 Active Coupons</h3>
+      <div id="coup-list"><p style="color:var(--gy);font-size:.84rem">Load ho raha hai...</p></div>
+    </div>
+  </div>
 </div>
 
 <!-- VIEWER -->
@@ -469,12 +567,12 @@ footer strong{color:var(--sf)}
 </main>
 
 <footer>
-  <p>© 2026 <strong>PDSU Digital Library</strong> -
-  Pandit Deendayal Upadhyaya Shekhawati University<br>
-   | Developer: Giriraj Pareek | </p>
+  <p>© 2026 <strong>PDSU Digital Library</strong> — Pandit Deendayal Upadhyaya Shekhawati University<br>
+  Powered by Firebase | Developer: Giriraj Pareek | 
 </footer>
 
 <div id="pay-modal" style="display:none"></div>
+<div id="prev-modal" style="display:none"></div>
 
 <!-- Floating Telegram Help Button -->
 <button class="fab" onclick="openTG()" title="Help chahiye? Telegram par message karo">
@@ -489,10 +587,10 @@ footer strong{color:var(--sf)}
 const ADMIN_PASS = 'pdsu@admin2024';
 const UPI_ID     = '7727867614@postbank';
 const TG_BOT     = 'https://t.me/pdsu_library_help_bot';
-const TG_TOKEN   = '8425165206:AAEMqrkGBQ_W0XqbmRZdDmfr7hj-yOncPsE';
-// Apna Telegram user_id yahan daalo (admin notifications ke liye)
-// BotFather se @userinfobot par /start karo, user_id milega
-const TG_ADMIN_CHAT_ID = '5680821904';
+const TG_PROXY   = 'https://script.google.com/macros/s/AKfycbz3Tptqs8G3AtgOlKBQFpkJjlH4jjhDRBi1Wizz8z6TmY75RfKBKAgVliUJxZ53HutwXQ/exec'; // ✅ Secure
+
+
+
 
 // ═══════════════════════════════
 //  STREAMS
@@ -650,18 +748,103 @@ function showBooks(){
         <div class="bk-mt">${bk.subject?esc(bk.subject):''}${bk.category?' • '+esc(bk.category):''}</div>
         <div class="bk-ft">
           <div class="bk-pr"><span>₹</span>${bk.price}</div>
-          ${st==='approved'
-            ?`<button class="btn-bk bb-open" onclick="openBook('${bk.id}')">Open →</button>`
-            :st==='pending'
-            ?`<button class="btn-bk bb-wait" disabled>Verifying...</button>`
-            :window._cur
-            ?`<button class="btn-bk bb-buy" onclick="openPay('${bk.id}')">Get Now</button>`
-            :`<button class="btn-bk bb-buy" onclick="nav('login')">Login to Buy</button>`
-          }
+          <div style="display:flex;flex-direction:column;gap:.35rem;align-items:flex-end">
+            ${st==='approved'
+              ?`<button class="btn-bk bb-open" onclick="openBook('${bk.id}')">Open →</button>`
+              :st==='pending'
+              ?`<button class="btn-bk bb-wait" disabled>Verifying...</button>`
+              :window._cur
+              ?`<button class="btn-bk bb-buy" onclick="openPay('${bk.id}')">Get Now</button>`
+              :`<button class="btn-bk bb-buy" onclick="nav('login')">Login to Buy</button>`
+            }
+            ${st!=='approved'&&bk.content?`<button class="btn-bk bb-prev" onclick="openPreview('${bk.id}')" style="font-size:.68rem;padding:.32rem .8rem">👁 Free Preview</button>`:''}
+          </div>
         </div>
       </div>
     </div>`;
   }).join('');
+}
+
+
+// ═══════════════════════════════
+//  FREE PREVIEW MODAL
+// ═══════════════════════════════
+let _prevBook = null;
+function openPreview(bid){
+  _prevBook = (window._books||[]).find(b=>b.id===bid);
+  if(!_prevBook) return;
+  const m = document.getElementById('prev-modal');
+  m.style.display = 'flex';
+  m.className = 'prev-mov';
+  m.innerHTML = `
+  <div class="prev-mo">
+    <div class="prev-hd">
+      <div class="prev-hd-info">
+        <h3>${esc(_prevBook.title)}</h3>
+        <p>👁 Free Preview — Pehle 3 Pages</p>
+      </div>
+      <button class="prev-close" onclick="closePreview()">✕</button>
+    </div>
+    <div class="prev-body" id="prev-body">
+      <div class="prev-loader"><div class="prev-spin"></div><p style="font-size:.82rem">Preview load ho rahi hai...</p></div>
+    </div>
+    <div class="prev-fade"></div>
+    <div class="prev-cta">
+      <p>🔒 Sirf pehle 3 pages free hain — poori book ke liye purchase karo</p>
+      <div class="prev-cta-btns">
+        <button class="prev-cancel" onclick="closePreview()">Baad Mein</button>
+        <button class="prev-buy" onclick="closePreview();openPay('${_prevBook.id}')">💳 Abhi Kharido — ₹${_prevBook.price}</button>
+      </div>
+    </div>
+  </div>`;
+  _renderPreview(_prevBook);
+}
+async function _renderPreview(bk){
+  const body = document.getElementById('prev-body');
+  if(!body) return;
+  try{
+    if(bk.contentType==='pdf' && bk.content?.startsWith('https://')){
+      // PDF preview using PDF.js
+      if(typeof pdfjsLib === 'undefined') throw new Error('PDF.js not loaded');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const pdf = await pdfjsLib.getDocument(bk.content).promise;
+      const totalPages = Math.min(3, pdf.numPages);
+      body.innerHTML = '<div class="prev-pages" id="prev-pages"></div>';
+      const container = document.getElementById('prev-pages');
+      for(let i=1; i<=totalPages; i++){
+        const wrap = document.createElement('div');
+        const label = document.createElement('p');
+        label.className = 'prev-page-label';
+        label.textContent = `Page ${i} of ${pdf.numPages}`;
+        const canvas = document.createElement('canvas');
+        wrap.appendChild(label);
+        wrap.appendChild(canvas);
+        container.appendChild(wrap);
+        const page = await pdf.getPage(i);
+        const vp = page.getViewport({scale: 1.5});
+        canvas.width = vp.width;
+        canvas.height = vp.height;
+        await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
+      }
+    } else if(bk.content){
+      // HTML content preview — show first 600 chars
+      const tmp = document.createElement('div');
+      tmp.innerHTML = bk.content;
+      const text = tmp.innerText || tmp.textContent || '';
+      const preview = text.substring(0, 700);
+      body.innerHTML = `<div class="prev-html-content">${preview}<span style="color:var(--gy)">...</span></div>`;
+    } else {
+      body.innerHTML = '<p style="text-align:center;padding:2rem;color:var(--gy)">Is book ka preview available nahi hai.</p>';
+    }
+  } catch(e){
+    body.innerHTML = '<p style="text-align:center;padding:2rem;color:var(--gy)">Preview load nahi ho saka. Dobara try karo.</p>';
+    console.error('Preview error:', e);
+  }
+}
+function closePreview(){
+  const m = document.getElementById('prev-modal');
+  m.style.display = 'none';
+  m.innerHTML = '';
 }
 
 function getSt(bid){const p=(window._purchases||[]).find(p=>p.bookId===bid);return p?p.status:null;}
@@ -677,17 +860,25 @@ function openPay(bid){
   if(!window._cur)return nav('login');
   _selBook=(window._books||[]).find(b=>b.id===bid);
   if(!_selBook)return;
+  _appliedCoupon=null; _finalPrice=_selBook.price;
   const qr=`https://api.qrserver.com/v1/create-qr-code/?size=155x155&data=upi://pay?pa=${UPI_ID}%26pn=GIRIRAJ%20PAREEK%26am=${_selBook.price}%26cu=INR`;
   document.getElementById('pay-modal').style.display='flex';
   document.getElementById('pay-modal').className='mov';
   document.getElementById('pay-modal').innerHTML=`
   <div class="mo">
     <h3>💳 Secure Payment</h3>
-    <p class="mo-sub">₹${_selBook.price} • "${esc(_selBook.title)}"</p>
+    <p class="mo-sub" id="mo-price-sub">₹${_selBook.price} • "${esc(_selBook.title)}"</p>
     <div class="qr-box"><img src="${qr}" alt="UPI QR" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22155%22 height=%22155%22><rect width=%22155%22 height=%22155%22 fill=%22%23eee%22/><text x=%2277%22 y=%2282%22 text-anchor=%22middle%22 fill=%22%23888%22 font-size=%2212%22>QR Load ho raha hai</text></svg>'"></div>
     <div class="upi-l">GIRIRAJ PAREEK • IPPB • ${UPI_ID}</div>
 
-    <span class="utr-lb">Step 1: UPI pay karo → UTR No. (12 digits) milega</span>
+    <div class="coup-row">
+      <input class="coup-in" id="coup-i" type="text" maxlength="20" placeholder="COUPON CODE (optional)">
+      <button class="coup-apply" onclick="applyCoupon()">Apply</button>
+    </div>
+    <div class="coup-status" id="coup-status"></div>
+    <div id="price-display" style="margin-bottom:.65rem"></div>
+
+    <span class="utr-lb">UPI pay karo → UTR No. (12 digits) milega</span>
     <input class="utr-in" id="utr-i" type="text" maxlength="12" placeholder="000000000000" oninput="this.value=this.value.replace(/\\D/g,'');chkUTR()">
 
     <p style="font-size:.7rem;color:var(--gy);text-align:left;margin-bottom:.65rem;line-height:1.5">
@@ -713,9 +904,11 @@ async function doPay(){
   const b=document.getElementById('pay-btn');
   b.disabled=1;b.textContent='Submit ho raha hai...';
   try{
-    await window.submitPayment(_selBook.id,_selBook.title,_selBook.price,utr);
-    // Telegram notification to admin (formatted Markdown alert)
-    await sendTelegramAlert(window._cur.email, _selBook.title, _selBook.price, utr);
+    const payAmt = _finalPrice || _selBook.price;
+    const couponInfo = _appliedCoupon ? ` [Coupon: ${_appliedCoupon.code}]` : '';
+    await window.submitPayment(_selBook.id,_selBook.title,payAmt,utr);
+    if(_appliedCoupon) await window.useCoupon(_appliedCoupon.id);
+    sendTelegramAlert(window._cur.email, _selBook.title+couponInfo, payAmt, utr);
     closePay();
     toast('Payment submit ho gaya! 1-2 ghante mein verify hoga ⏳','ok');
     renderLib();
@@ -731,15 +924,101 @@ function sendTG(){
 }
 function openTG(){window.open(TG_BOT,'_blank');}
 
-// Telegram Bot API message sender
-async function sendTGMsg(text){
-  if(!TG_ADMIN_CHAT_ID)return;
-  try{await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:TG_ADMIN_CHAT_ID,text,parse_mode:'HTML'})});}catch{}
+
+// ═══════════════════════════════
+//  COUPON SYSTEM
+// ═══════════════════════════════
+let _appliedCoupon = null, _finalPrice = 0;
+
+async function applyCoupon(){
+  const code = (document.getElementById('coup-i')?.value||'').trim().toUpperCase();
+  const st = document.getElementById('coup-status');
+  const inp = document.getElementById('coup-i');
+  if(!code){ st.className='coup-status err'; st.textContent='⚠️ Coupon code likho pehle'; return; }
+  st.className='coup-status'; st.textContent='Checking...'; st.style.display='block';
+  try{
+    const cp = await window.validateCoupon(code);
+    if(!cp){
+      inp.className='coup-in invalid';
+      st.className='coup-status err';
+      st.textContent='❌ Invalid ya expired coupon code!';
+      _appliedCoupon=null; _finalPrice=_selBook.price;
+      document.getElementById('price-display').innerHTML='';
+      return;
+    }
+    _appliedCoupon = cp;
+    const orig = _selBook.price;
+    let disc = cp.discountType==='percent' ? Math.round(orig*cp.discountValue/100) : cp.discountValue;
+    disc = Math.min(disc, orig-1);
+    _finalPrice = orig - disc;
+    inp.className='coup-in valid';
+    st.className='coup-status ok';
+    st.textContent = cp.discountType==='percent'
+      ? `🎉 "${cp.code}" applied! ${cp.discountValue}% off mil gaya!`
+      : `🎉 "${cp.code}" applied! ₹${cp.discountValue} off mil gaya!`;
+    document.getElementById('price-display').innerHTML=`
+      <div class="disc-line"><span style="font-size:.72rem;color:var(--gy)">Original Price</span><span class="disc-orig">₹${orig}</span></div>
+      <div class="disc-line"><span style="font-size:.72rem;color:var(--gy)">Discount</span><span class="disc-save">- ₹${disc}</span></div>
+      <div class="disc-line" style="margin-top:.3rem;padding-top:.4rem;border-top:1px dashed var(--cr-d)"><span style="font-size:.78rem;font-weight:700;color:var(--ink)">Final Amount</span><span class="disc-final">₹${_finalPrice}</span></div>`;
+    // Update QR with new price
+    const qrImg = document.querySelector('.qr-box img');
+    if(qrImg) qrImg.src=`https://api.qrserver.com/v1/create-qr-code/?size=155x155&data=upi://pay?pa=${UPI_ID}%26pn=GIRIRAJ%20PAREEK%26am=${_finalPrice}%26cu=INR`;
+    const sub = document.getElementById('mo-price-sub');
+    if(sub) sub.textContent=`₹${_finalPrice} (after discount) • "${_selBook.title}"`;
+  }catch(e){ st.className='coup-status err'; st.textContent='Error! Dobara try karo.'; }
 }
 
-// ─── New Payment Alert (Markdown format) ───
+async function doCreateCoupon(){
+  const code=(document.getElementById('cp-code')?.value||'').trim().toUpperCase();
+  const type=document.getElementById('cp-type')?.value;
+  const val=Number(document.getElementById('cp-val')?.value||0);
+  const maxU=Number(document.getElementById('cp-max')?.value||0);
+  if(!code||code.length<3) return toast('Min 3 character ka code chahiye','err');
+  if(!val||val<=0) return toast('Discount value dalo','err');
+  if(type==='percent'&&val>90) return toast('Max 90% discount allowed','err');
+  try{
+    await window.createCoupon({code,discountType:type,discountValue:val,maxUses:maxU,active:true});
+    toast(`Coupon "${code}" ban gaya! 🎟️`,'ok');
+    document.getElementById('cp-code').value='';
+    document.getElementById('cp-val').value='';
+    document.getElementById('cp-max').value='0';
+    loadCouponList();
+  }catch(e){ toast('Error! Dobara try karo.','err'); }
+}
+
+async function loadCouponList(){
+  const lst=document.getElementById('coup-list');
+  lst.innerHTML='<p style="color:var(--gy);font-size:.84rem">Load ho raha hai...</p>';
+  try{
+    const cps=await window.loadCoupons();
+    const active=cps.filter(c=>c.active!==false);
+    if(!active.length){lst.innerHTML='<div class="empty"><div class="em">🎟️</div><p>Koi active coupon nahi.</p></div>';return;}
+    lst.innerHTML=active.map(c=>`
+      <div class="cp-card">
+        <div>
+          <div style="display:flex;align-items:center;gap:.6rem">
+            <span class="cp-code">${esc(c.code)}</span>
+            <span class="cp-badge ${c.discountType==='percent'?'cp-pct':'cp-flat'}">${c.discountType==='percent'?c.discountValue+'% OFF':'₹'+c.discountValue+' OFF'}</span>
+          </div>
+          <div class="cp-meta">Used: ${c.usedCount||0}${c.maxUses>0?' / '+c.maxUses+' max':' times (unlimited)'}</div>
+        </div>
+        <button class="cp-del" onclick="deactivateCoupon('${c.id}','${esc(c.code)}')">🗑 Delete</button>
+      </div>`).join('');
+  }catch{lst.innerHTML='<p style="color:red;font-size:.84rem">Load nahi hua. Refresh karo.</p>';}
+}
+
+async function deactivateCoupon(id,code){
+  if(!confirm(`"${code}" coupon delete karna chahte ho?`))return;
+  try{
+    await window.deleteCoupon(id);
+    toast(`Coupon "${code}" delete ho gaya`,'ok');
+    loadCouponList();
+  }catch{toast('Error!','err');}
+}
+
+// ✅ Secure Telegram Alert — Token server-side hai (Google Apps Script)
 async function sendTelegramAlert(userEmail, bookTitle, amount, utr) {
-  const message = [
+  const msg = [
     '🔔 *New Payment Alert*',
     '--------------------------',
     `📧 *Email:* ${userEmail}`,
@@ -747,15 +1026,12 @@ async function sendTelegramAlert(userEmail, bookTitle, amount, utr) {
     `💰 *Amount:* ₹${amount}`,
     `🔢 *UTR:* ${utr}`,
     '--------------------------',
-    '✅ *Action:* Please verify in Admin Panel.'
+    '✅ *Action:* Admin Panel mein verify karo'
   ].join('\n');
-  const url = `https://api.telegram.org/bot${TG_TOKEN}/sendMessage?chat_id=${TG_ADMIN_CHAT_ID}&text=${encodeURIComponent(message)}&parse_mode=Markdown`;
   try {
-    await fetch(url);
-    console.log("Telegram notification sent!");
-  } catch (error) {
-    console.error("Telegram Error:", error);
-  }
+    await fetch(`${TG_PROXY}?msg=${encodeURIComponent(msg)}`);
+    console.log('Telegram alert sent ✅');
+  } catch(e) { console.error('Telegram Error:', e); }
 }
 
 // ═══════════════════════════════
@@ -853,7 +1129,7 @@ async function doApprove(id,email,bookTitle){
     await window.approvePurchase(id);
     document.getElementById('pc-'+id)?.remove();
     // Notify student via Telegram (if they messaged bot)
-    if(TG_ADMIN_CHAT_ID) sendTGMsg(`✅ Approved!\n\nStudent: ${email}\nBook: ${bookTitle}\nAccess ab unlock hai!`);
+    sendTelegramAlert(email, bookTitle, 'Approved ✅', 'N/A');
     toast('Payment approve! ✅','ok');
   }catch{toast('Error approving','err');}
 }
@@ -862,6 +1138,8 @@ function swAT(t){
   document.getElementById('at-'+t).classList.add('act');
   document.getElementById('adm-pay').style.display=t==='pay'?'block':'none';
   document.getElementById('adm-up').style.display=t==='up'?'block':'none';
+  document.getElementById('adm-coup').style.display=t==='coup'?'block':'none';
+  if(t==='coup') loadCouponList();
 }
 
 // ═══════════════════════════════
@@ -929,4 +1207,4 @@ function toast(msg,type=''){
 nav('home');
 </script>
 </body>
-        </html>
+</html>
