@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDSU Digital Library — Shekhawati University</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+           signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, collection, addDoc, getDocs, query,
+           where, updateDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getStorage, ref, uploadBytesResumable,
+           getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+
+  const cfg = {
+    apiKey:"AIzaSyBHFVlEkyAFLuMuYsbdBuHpr0OjyWmVQK4",
+    authDomain:"giriraj-pareek.firebaseapp.com",
+    projectId:"giriraj-pareek",
+    storageBucket:"giriraj-pareek.firebasestorage.app",
+    messagingSenderId:"364401883193",
+    appId:"1:364401883193:web:4c8f03ca3e5ceb31c235e8"
+  };
+  const app=initializeApp(cfg), auth=getAuth(app), db=getFirestore(app), stor=getStorage(app);
+  window._auth=auth; window._db=db; window._stor=stor;
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    onAuthStateChanged(auth,async user=>{
+      if(user){
+        window._cur={uid:user.uid,email:user.email,isAdmin:user.email==='admin@pdsu.ac.in',name:user.displayName||'Student'};
+        await loadPurchases(user.uid);
+      } else { window._cur=null; window._purchases=[]; }
+      await loadBooks(); renderApp();
+    });
+  });
+
+  window.loadBooks=async()=>{ try{ const s=await getDocs(collection(db,"books")); window._books=s.docs.map(d=>({id:d.id,...d.data()})); }catch{ window._books=[]; } };
+  window.loadPurchases=async uid=>{ try{ const s=await getDocs(query(collection(db,"purchases"),where("userId","==",uid))); window._purchases=s.docs.map(d=>({id:d.id,...d.data()})); }catch{ window._purchases=[]; } };
+  window.regUser=(n,e,p)=>createUserWithEmailAndPassword(auth,e,p);
+  window.loginUser=(e,p)=>signInWithEmailAndPassword(auth,e,p);
+  window.logoutUser=()=>signOut(auth);
+  window.uploadBook=async d=>{ await addDoc(collection(db,"books"),d); await loadBooks(); };
+  window.submitPayment=async(bId,bTitle,price,utr)=>{ const u=window._cur; await addDoc(collection(db,"purchases"),{userId:u.uid,userEmail:u.email,bookId:bId,bookTitle:bTitle,amount:price,utrNumber:utr,status:'pending',createdAt:new Date()}); await loadPurchases(u.uid); };
+  window.approvePurchase=id=>updateDoc(doc(db,"purchases",id),{status:'approved'});
+  window.loadPending=async()=>{ const s=await getDocs(query(collection(db,"purchases"),where("status","==","pending"))); return s.docs.map(d=>({id:d.id,...d.data()})); };
+  window.uploadPDF=(file,onP)=>new Promise((res,rej)=>{ const nm=Date.now()+'_'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_'); const t=uploadBytesResumable(ref(stor,'books/'+nm),file); t.on('state_changed',s=>onP&&onP(Math.round(s.bytesTransferred/s.totalBytes*100)),rej,async()=>res(await getDownloadURL(t.snapshot.ref))); });
+</script>
+
+<style>
+:root{
+  --sf:#E8670A;--sf-d:#B84E00;--sf-l:#FFF3E8;
+  --mr:#7B1D1D;--mr-d:#5A0F0F;
+  --cr:#FDF6ED;--cr-d:#F0DFC0;
+  --gd:#D4A017;--gd-l:#F0C040;
+  --gn:#1A7A40;--gn-l:#E8F5EE;
+  --tg:#229ED9;--tg-d:#1A7DAA;
+  --ink:#1A0A00;--ink-m:#4A2800;
+  --gy:#8A7060;
+  --sh:0 8px 40px rgba(184,78,0,.15);
+  --sh-h:0 20px 60px rgba(184,78,0,.25);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:var(--cr);color:var(--ink);min-height:100vh;overflow-x:hidden}
+
+/* LOADING */
+#ls{position:fixed;inset:0;background:var(--mr);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity .5s,visibility .5s}
+#ls.gone{opacity:0;visibility:hidden;pointer-events:none}
+.ll{font-family:'Playfair Display',serif;color:var(--gd-l);font-size:2rem;font-weight:900;margin-bottom:1rem;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.lb{width:180px;height:3px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden}
+.lb::after{content:'';display:block;height:100%;background:var(--gd-l);animation:lb 1.5s infinite}
+@keyframes lb{0%{width:0;margin-left:0}50%{width:100%;margin-left:0}100%{width:0;margin-left:100%}}
+
+/* HEADER */
+header{position:sticky;top:0;z-index:200;background:var(--mr);border-bottom:3px solid var(--gd);padding:0 2rem}
+.hi{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:66px}
+.logo{display:flex;flex-direction:column;cursor:pointer}
+.logo-n{font-family:'Playfair Display',serif;font-size:1.3rem;font-weight:900;color:var(--gd-l);line-height:1;letter-spacing:-.5px}
+.logo-s{font-size:.48rem;color:rgba(255,255,255,.55);letter-spacing:3px;text-transform:uppercase}
+nav{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.nb{background:none;border:none;cursor:pointer;color:rgba(255,255,255,.8);font-family:'DM Sans',sans-serif;font-size:.73rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:.32rem .65rem;border-radius:6px;transition:all .2s}
+.nb:hover{color:#fff;background:rgba(255,255,255,.1)}
+.nb.acc{background:var(--gd);color:var(--mr-d)}
+.nb.acc:hover{background:var(--gd-l)}
+.nb.tg{background:var(--tg);color:#fff}
+.nb.tg:hover{background:var(--tg-d)}
+.nb.red{background:rgba(255,255,255,.1);color:#fff}
+
+/* MAIN */
+main{max-width:1200px;margin:0 auto;padding:2.5rem 2rem}
+.view{display:none;animation:fu .4s ease}
+.view.active{display:block}
+@keyframes fu{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+
+/* HERO */
+.hero{min-height:65vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.badge{display:inline-flex;align-items:center;gap:.5rem;background:var(--sf);color:#fff;font-size:.63rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:.3rem .9rem;border-radius:100px;margin-bottom:1.6rem}
+.badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--gd-l);animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.hero h1{font-family:'Playfair Display',serif;font-size:clamp(2.6rem,8vw,5rem);font-weight:900;line-height:.92;color:var(--mr);letter-spacing:-3px;margin-bottom:1.2rem}
+.hero h1 em{color:var(--sf);font-style:normal}
+.hero-sub{font-size:.95rem;color:var(--ink-m);max-width:480px;line-height:1.65;margin-bottom:2.5rem;font-weight:300}
+.cta-g{display:flex;gap:1rem;flex-wrap:wrap;justify-content:center}
+.btn-p{background:var(--sf);color:#fff;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.88rem;font-weight:700;padding:.85rem 2rem;border-radius:12px;box-shadow:0 8px 30px rgba(232,103,10,.4);transition:all .25s}
+.btn-p:hover{background:var(--sf-d);transform:translateY(-2px)}
+.btn-s{background:transparent;color:var(--mr);border:2px solid var(--mr);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.88rem;font-weight:700;padding:.85rem 2rem;border-radius:12px;transition:all .25s}
+.btn-s:hover{background:var(--mr);color:#fff}
+.stats-r{display:flex;gap:2.5rem;margin-top:4rem;justify-content:center;flex-wrap:wrap}
+.stat{text-align:center}
+.stat-n{font-family:'Playfair Display',serif;font-size:2.2rem;font-weight:900;color:var(--sf);line-height:1}
+.stat-l{font-size:.68rem;font-weight:700;color:var(--gy);letter-spacing:1px;text-transform:uppercase;margin-top:.2rem}
+
+/* PAGE HEADING */
+.ph{font-family:'Playfair Display',serif;font-size:2rem;font-weight:900;color:var(--mr);letter-spacing:-1px}
+.ps{color:var(--gy);font-size:.85rem;margin-top:.2rem;margin-bottom:2rem}
+
+/* BREADCRUMB */
+.bc{display:flex;align-items:center;gap:.45rem;margin-bottom:1.5rem;flex-wrap:wrap}
+.bci{font-size:.76rem;font-weight:700;color:var(--gy);cursor:pointer;transition:color .2s}
+.bci:hover,.bci.act{color:var(--sf)}
+.bcs{color:var(--cr-d);font-size:.9rem}
+
+/* STREAM GRID */
+.sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:1.1rem;margin-top:.5rem}
+.sc{background:#fff;border:2px solid var(--cr-d);border-radius:20px;padding:1.6rem 1.1rem;text-align:center;cursor:pointer;transition:all .3s;position:relative;overflow:hidden}
+.sc::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,var(--mr),var(--sf-d));opacity:0;transition:opacity .3s}
+.sc:hover{transform:translateY(-5px);box-shadow:var(--sh-h);border-color:var(--sf)}
+.sc:hover::before{opacity:1}
+.sc:hover .sc-e,.sc:hover .sc-n,.sc:hover .sc-c{position:relative;z-index:1;color:#fff}
+.sc-e{font-size:2.4rem;margin-bottom:.65rem;display:block;transition:color .3s}
+.sc-n{font-weight:800;font-size:.95rem;color:var(--mr);display:block;margin-bottom:.25rem;transition:color .3s}
+.sc-c{font-size:.68rem;font-weight:600;color:var(--gy);transition:color .3s}
+
+/* SEMESTER PILLS */
+.sem-row{display:flex;flex-wrap:wrap;gap:.65rem;margin-bottom:2rem}
+.sp{padding:.45rem 1.1rem;border:2px solid var(--cr-d);border-radius:100px;background:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.8rem;font-weight:700;color:var(--gy);transition:all .2s}
+.sp:hover{border-color:var(--sf);color:var(--sf)}
+.sp.act{background:var(--sf);border-color:var(--sf);color:#fff;box-shadow:0 4px 15px rgba(232,103,10,.3)}
+.sp.empty-sem{opacity:.45;cursor:default}
+.sp.empty-sem:hover{border-color:var(--cr-d);color:var(--gy)}
+
+/* BOOKS GRID */
+.bg{display:grid;grid-template-columns:repeat(auto-fill,minmax(265px,1fr));gap:1.4rem}
+.bk{background:#fff;border-radius:20px;border:2px solid var(--cr-d);overflow:hidden;transition:all .3s}
+.bk:hover{box-shadow:var(--sh-h);transform:translateY(-4px);border-color:var(--sf)}
+.bk-cov{height:148px;display:flex;align-items:center;justify-content:center;font-size:3.2rem;position:relative;overflow:hidden}
+.bk-cov::after{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.06'%3E%3Ccircle cx='20' cy='20' r='3'/%3E%3C/g%3E%3C/svg%3E")}
+.bk-tag{position:absolute;top:.65rem;right:.65rem;padding:.18rem .6rem;border-radius:100px;font-size:.58rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;z-index:1}
+.t-own{background:var(--gn);color:#fff}
+.t-pen{background:var(--gd);color:var(--mr-d)}
+.bk-bd{padding:1.2rem}
+.bk-tt{font-weight:700;font-size:.97rem;color:var(--ink);margin-bottom:.22rem;line-height:1.35}
+.bk-mt{font-size:.72rem;color:var(--gy);margin-bottom:.85rem;font-weight:500}
+.bk-ft{display:flex;align-items:center;justify-content:space-between}
+.bk-pr{font-family:'Playfair Display',serif;font-size:1.45rem;font-weight:700;color:var(--sf);letter-spacing:-.5px}
+.bk-pr span{font-size:.82rem;font-family:'DM Sans',sans-serif}
+.btn-bk{padding:.5rem 1.15rem;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.76rem;font-weight:700;border-radius:10px;transition:all .2s}
+.bb-buy{background:var(--sf);color:#fff}
+.bb-buy:hover{background:var(--sf-d)}
+.bb-open{background:var(--gn);color:#fff}
+.bb-open:hover{filter:brightness(1.1)}
+.bb-wait{background:var(--cr-d);color:var(--gy);cursor:not-allowed}
+.empty{text-align:center;padding:4rem 2rem;color:var(--gy);grid-column:1/-1}
+.empty .em{font-size:3.2rem;margin-bottom:.9rem}
+
+/* AUTH */
+.aw{max-width:420px;margin:2rem auto;background:#fff;border-radius:24px;padding:2.75rem;box-shadow:var(--sh-h);border:1.5px solid var(--cr-d)}
+.aw h2{font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:900;color:var(--mr);text-align:center;margin-bottom:.4rem}
+.aw > p{text-align:center;color:var(--gy);font-size:.82rem;margin-bottom:1.75rem}
+.fg{margin-bottom:1.05rem}
+.fg label{display:block;font-size:.68rem;font-weight:700;color:var(--gy);letter-spacing:1px;text-transform:uppercase;margin-bottom:.32rem}
+.fg input,.fg select,.fg textarea{width:100%;padding:.82rem .95rem;background:var(--cr);border:2px solid var(--cr-d);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:.92rem;color:var(--ink);outline:none;transition:border-color .2s;resize:vertical}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--sf);background:#fff}
+.fbtn{width:100%;padding:.95rem;background:var(--sf);color:#fff;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.92rem;font-weight:700;border-radius:12px;margin-top:.4rem;box-shadow:0 6px 20px rgba(232,103,10,.35);transition:all .25s}
+.fbtn:hover:not(:disabled){background:var(--sf-d);transform:translateY(-1px)}
+.fbtn:disabled{background:#ccc;box-shadow:none;cursor:not-allowed}
+.asw{text-align:center;margin-top:1.2rem;font-size:.8rem;color:var(--gy)}
+.asw a{color:var(--sf);font-weight:700;cursor:pointer}
+
+/* PAYMENT MODAL */
+.mov{position:fixed;inset:0;background:rgba(26,10,0,.88);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1.25rem;animation:fi .25s ease}
+@keyframes fi{from{opacity:0}to{opacity:1}}
+.mo{background:#fff;border-radius:28px;padding:1.75rem;max-width:400px;width:100%;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.4);animation:su .3s ease;max-height:94vh;overflow-y:auto}
+@keyframes su{from{transform:translateY(28px);opacity:0}to{transform:translateY(0);opacity:1}}
+.mo h3{font-family:'Playfair Display',serif;font-size:1.35rem;font-weight:900;color:var(--mr);margin-bottom:.22rem}
+.mo-sub{font-size:.78rem;color:var(--gy);margin-bottom:1.1rem}
+.qr-box{background:#fff;border:2px solid var(--cr-d);border-radius:14px;padding:.7rem;display:inline-block;margin-bottom:.65rem}
+.qr-box img{display:block;width:155px;height:155px}
+.upi-l{font-size:.62rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gy);margin-bottom:1rem}
+.utr-in{width:100%;padding:.85rem;background:var(--cr);border:2px solid var(--cr-d);border-radius:12px;font-family:'JetBrains Mono',monospace;font-size:1rem;text-align:center;letter-spacing:3px;color:var(--ink);outline:none;transition:border-color .2s;margin-bottom:.75rem}
+.utr-in:focus{border-color:var(--sf);background:#fff}
+.utr-lb{font-size:.65rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--gy);margin-bottom:.4rem;display:block;text-align:left}
+.tg-btn{width:100%;padding:.72rem;background:var(--tg);color:#fff;border:none;border-radius:11px;font-family:'DM Sans',sans-serif;font-size:.82rem;font-weight:700;cursor:pointer;margin-bottom:.65rem;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:.45rem}
+.tg-btn:hover{background:var(--tg-d);transform:translateY(-1px)}
+.m-acts{display:flex;gap:.6rem}
+.btn-mc{flex:1;padding:.82rem;background:var(--cr);border:2px solid var(--cr-d);border-radius:11px;font-family:'DM Sans',sans-serif;font-weight:700;color:var(--gy);cursor:pointer;transition:all .2s}
+.btn-mc:hover{border-color:var(--mr);color:var(--mr)}
+.btn-mp{flex:2;padding:.82rem;background:var(--sf);border:none;border-radius:11px;color:#fff;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer;transition:all .2s;font-size:.86rem}
+.btn-mp:hover:not(:disabled){background:var(--sf-d)}
+.btn-mp:disabled{background:#ccc;cursor:not-allowed}
+
+/* ADMIN */
+.ag{max-width:400px;margin:4rem auto;background:#fff;border-radius:24px;padding:2.75rem;box-shadow:var(--sh-h);border:2px solid var(--cr-d);text-align:center}
+.ag h2{font-family:'Playfair Display',serif;font-size:1.7rem;font-weight:900;color:var(--mr);margin-bottom:.3rem}
+.ag > p{color:var(--gy);font-size:.82rem;margin-bottom:1.75rem}
+.at-row{display:flex;gap:.65rem;margin-bottom:1.75rem;border-bottom:2px solid var(--cr-d)}
+.at{padding:.65rem 1.15rem;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.82rem;font-weight:700;background:none;color:var(--gy);position:relative;transition:color .2s}
+.at.act{color:var(--sf)}
+.at.act::after{content:'';position:absolute;bottom:-2px;left:0;right:0;height:2px;background:var(--sf)}
+.pc{background:#fff;border-radius:15px;padding:1.3rem;border:2px solid var(--cr-d);display:flex;justify-content:space-between;align-items:center;margin-bottom:.9rem;transition:border-color .2s;gap:.9rem}
+.pc:hover{border-color:var(--sf)}
+.pc-em{font-size:.7rem;font-weight:700;color:var(--gy);letter-spacing:.5px;text-transform:uppercase;margin-bottom:.22rem}
+.pc-bk{font-weight:700;font-size:.92rem;color:var(--ink);margin-bottom:.22rem}
+.pc-ut{font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--sf);font-weight:700}
+.btn-apr{padding:.5rem 1.15rem;background:var(--gn);color:#fff;border:none;border-radius:9px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:700;font-size:.8rem;transition:all .2s;white-space:nowrap}
+.btn-apr:hover{filter:brightness(1.12);transform:scale(1.02)}
+.shake{animation:shk .4s ease}
+@keyframes shk{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+
+/* VIEWER */
+.vw{max-width:820px;margin:0 auto;background:#fff;border-radius:24px;box-shadow:var(--sh-h);overflow:hidden}
+.vw-hd{background:var(--mr);padding:1.75rem 2.25rem;color:#fff}
+.vw-bk{background:none;border:none;cursor:pointer;color:rgba(255,255,255,.6);font-family:'DM Sans',sans-serif;font-size:.73rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:0;margin-bottom:.85rem;display:flex;align-items:center;gap:.4rem;transition:color .2s}
+.vw-bk:hover{color:#fff}
+.vw-tt{font-family:'Playfair Display',serif;font-size:1.65rem;font-weight:900;letter-spacing:-.5px;margin-bottom:.4rem}
+.vw-wm{font-size:.62rem;color:rgba(255,255,255,.35);font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.vw-bd{padding:2.25rem;user-select:none;-webkit-user-select:none;line-height:1.85;color:var(--ink-m);font-size:.92rem}
+.vw-bd h1,.vw-bd h2,.vw-bd h3{font-family:'Playfair Display',serif;color:var(--mr);margin:1.5rem 0 .75rem}
+.vw-bd p{margin-bottom:1rem}
+.vw-ft{padding:1.25rem 2.25rem;background:var(--cr);border-top:2px solid var(--cr-d);display:flex;align-items:center;gap:.9rem}
+.vw-ft p{font-size:.63rem;color:var(--gy);font-weight:700;letter-spacing:.5px;text-transform:uppercase;line-height:1.5}
+
+/* MY BOOKS */
+.mg{display:grid;grid-template-columns:repeat(auto-fill,minmax(225px,1fr));gap:1.2rem}
+.mc{background:#fff;border-radius:16px;padding:1.3rem;border:2px solid #D4F0E0;display:flex;flex-direction:column;gap:.85rem;transition:all .25s}
+.mc:hover{box-shadow:var(--sh);border-color:var(--gn);transform:translateY(-2px)}
+.mc-tt{font-weight:700;color:var(--ink);font-size:.93rem;line-height:1.3;flex:1}
+.mc-bg{font-size:.7rem;font-weight:700;color:var(--gn)}
+
+/* PDF UPLOAD */
+.dz{border:2px dashed var(--cr-d);border-radius:12px;padding:1.65rem;text-align:center;cursor:pointer;background:var(--cr);transition:all .2s}
+.dz:hover{border-color:var(--sf);background:var(--sf-l)}
+.pbw{height:8px;background:var(--cr-d);border-radius:100px;overflow:hidden;margin-top:.45rem}
+.pb{height:100%;background:var(--sf);border-radius:100px;width:0%;transition:width .3s}
+
+/* FEATURES */
+.fts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1.2rem;margin:3rem 0}
+.fc{background:#fff;border-radius:16px;padding:1.65rem;border:1.5px solid var(--cr-d);transition:all .25s;position:relative;overflow:hidden}
+.fc::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--sf);transform:scaleX(0);transform-origin:left;transition:transform .3s}
+.fc:hover{transform:translateY(-4px);box-shadow:var(--sh)}
+.fc:hover::before{transform:scaleX(1)}
+.fc-i{font-size:1.65rem;margin-bottom:.85rem}
+.fc-t{font-weight:700;font-size:.92rem;color:var(--mr);margin-bottom:.38rem}
+.fc-d{font-size:.8rem;color:var(--gy);line-height:1.6}
+
+/* FLOATING TG BUTTON */
+.fab{position:fixed;bottom:1.75rem;right:1.75rem;width:54px;height:54px;background:var(--tg);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 20px rgba(34,158,217,.5);z-index:500;border:none;transition:all .25s;animation:fab-in .5s ease 2s both}
+.fab:hover{background:var(--tg-d);transform:scale(1.1)}
+@keyframes fab-in{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:scale(1)}}
+.fab svg{width:26px;height:26px;fill:#fff}
+.fab-tip{position:absolute;right:62px;background:var(--ink);color:#fff;padding:.38rem .8rem;border-radius:8px;font-size:.7rem;font-weight:700;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .2s;font-family:'DM Sans',sans-serif}
+.fab:hover .fab-tip{opacity:1}
+
+/* TOAST */
+.toast{position:fixed;bottom:5.5rem;right:1.75rem;background:var(--ink);color:#fff;padding:.85rem 1.3rem;border-radius:12px;font-size:.85rem;font-weight:500;box-shadow:0 8px 30px rgba(0,0,0,.3);z-index:9999;animation:slr .3s ease;max-width:270px;font-family:'DM Sans',sans-serif}
+.toast.ok{background:var(--gn)}
+.toast.err{background:#9B2020}
+.toast.tg{background:var(--tg)}
+@keyframes slr{from{transform:translateX(110%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+footer{text-align:center;padding:2.5rem 2rem;border-top:2px solid var(--cr-d);margin-top:5rem;color:var(--gy);font-size:.76rem;font-weight:500}
+footer strong{color:var(--sf)}
+
+@media(max-width:640px){
+  main{padding:1.75rem 1rem}
+  .hero h1{letter-spacing:-2px}
+  .stats-r{gap:1.5rem}
+  .aw{padding:2rem 1.4rem}
+  header{padding:0 1rem}
+  .sg{grid-template-columns:repeat(2,1fr)}
+  .hi{height:60px}
+}
+</style>
+</head>
+<body>
+
+<div id="ls">
+  <div class="ll">📚 PDSU Library</div>
+  <div class="lb"></div>
+  <p style="color:rgba(255,255,255,.4);font-size:.68rem;margin-top:1rem;letter-spacing:2px;font-family:'DM Sans',sans-serif">LOADING...</p>
+</div>
+
+<header>
+  <div class="hi">
+    <div class="logo" onclick="nav('home')">
+      <div class="logo-n">PDSU LIBRARY</div>
+      <div class="logo-s">Shekhawati University</div>
+    </div>
+    <nav id="hn"></nav>
+  </div>
+</header>
+
+<main>
+
+<!-- HOME -->
+<div class="view" id="view-home">
+  <div class="hero">
+    <div class="badge">🎓 Exam 2026 — Notes Ready Hain</div>
+    <h1>SUCCESS<br><em>STARTS</em><br>HERE.</h1>
+    <p class="hero-sub">BA, B.Sc, B.Com, BCA, BBA — apni stream aur semester ke Important Questions, Notes aur PYQ papers access karo ek jagah par.</p>
+    <div class="cta-g" id="hero-cta"></div>
+    <div class="stats-r">
+      <div class="stat"><div class="stat-n">5</div><div class="stat-l">Streams</div></div>
+      <div class="stat"><div class="stat-n">6</div><div class="stat-l">Semesters</div></div>
+      <div class="stat"><div class="stat-n">UPI</div><div class="stat-l">Fast Payment</div></div>
+      <div class="stat"><div class="stat-n">24/7</div><div class="stat-l">Access</div></div>
+    </div>
+  </div>
+  <div style="text-align:center;margin:1.5rem 0;color:var(--gd);font-size:1.2rem;letter-spacing:.5rem;opacity:.4">⊹ ⊹ ⊹</div>
+  <div class="fts">
+    <div class="fc"><div class="fc-i">🗂️</div><div class="fc-t">Stream & Semester Wise</div><div class="fc-d">BA, B.Sc, B.Com, BCA, BBA — apni stream select karo phir semester. Sirf relevant content dikhega.</div></div>
+    <div class="fc"><div class="fc-i">🔒</div><div class="fc-t">Secure Reader</div><div class="fc-d">Watermarked content, no download, no screenshot. Payment ke baad hi access milega.</div></div>
+    <div class="fc"><div class="fc-i">💳</div><div class="fc-t">UPI Payment</div><div class="fc-d">QR scan karo, UPI pay karo, UTR dalo. Fast approval ke liye Telegram screenshot bhi bhej sakte ho.</div></div>
+    <div class="fc"><div class="fc-i">💬</div><div class="fc-t">Telegram Support</div><div class="fc-d">Koi problem? Neeche Help button dabao. Payment screenshot Telegram par bhejo — 1-click fast approval!</div></div>
+  </div>
+</div>
+
+<!-- LOGIN -->
+<div class="view" id="view-login">
+  <div class="aw">
+    <h2>Wapas Aao! 👋</h2>
+    <p>Library access karne ke liye login karo</p>
+    <div class="fg"><label>Email</label><input type="email" id="li-e" placeholder="tumhara@email.com"></div>
+    <div class="fg"><label>Password</label><input type="password" id="li-p" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="fbtn" id="li-btn" onclick="doLogin()">Login Karo →</button>
+    <div class="asw">Naye ho? <a onclick="nav('register')">Account Banao</a></div>
+  </div>
+</div>
+
+<!-- REGISTER -->
+<div class="view" id="view-register">
+  <div class="aw">
+    <h2>Join PDSU Library</h2>
+    <p>Apna free student account banao abhi</p>
+    <div class="fg"><label>Pura Naam</label><input type="text" id="rg-n" placeholder="Ramesh Kumar"></div>
+    <div class="fg"><label>Email</label><input type="email" id="rg-e" placeholder="ramesh@gmail.com"></div>
+    <div class="fg"><label>Password Banao</label><input type="password" id="rg-p" placeholder="Min. 6 characters" onkeydown="if(event.key==='Enter')doRegister()"></div>
+    <button class="fbtn" id="rg-btn" onclick="doRegister()">Account Banao — Free 🎉</button>
+    <div class="asw">Pehle se account hai? <a onclick="nav('login')">Login karo</a></div>
+  </div>
+</div>
+
+<!-- LIBRARY -->
+<div class="view" id="view-library">
+  <div id="lib-hd"><h2 class="ph" id="lib-h">📚 Library</h2><p class="ps" id="lib-s">Apni stream choose karo</p></div>
+  <div class="bc" id="bc"></div>
+  <div id="pan-stream"></div>
+  <div id="pan-sem" style="display:none"></div>
+  <div class="bg" id="pan-books" style="display:none"></div>
+</div>
+
+<!-- MY BOOKS -->
+<div class="view" id="view-my-books">
+  <h2 class="ph">📖 My Books</h2>
+  <p class="ps">Tumhara purchased aur unlocked content</p>
+  <div class="mg" id="my-g"></div>
+</div>
+
+<!-- ADMIN -->
+<div class="view" id="view-admin">
+  <div id="adm-gate" class="ag">
+    <div style="font-size:2.5rem;margin-bottom:.65rem">🔐</div>
+    <h2>Admin Access</h2>
+    <p>Password enter karo dashboard unlock karne ke liye</p>
+    <div class="fg" style="text-align:left"><label>Admin Password</label>
+      <input type="password" id="adm-p" placeholder="••••••••" onkeydown="if(event.key==='Enter')chkAdm()"></div>
+    <button class="fbtn" style="margin-top:.35rem" onclick="chkAdm()">Dashboard Kholo →</button>
+  </div>
+  <div id="adm-dash" style="display:none">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.75rem;flex-wrap:wrap;gap:1rem">
+      <div><h2 class="ph">Admin Dashboard</h2><p class="ps" style="margin:0">Payments verify karo, books upload karo</p></div>
+      <button onclick="lockAdm()" style="background:var(--cr-d);border:none;cursor:pointer;padding:.4rem .9rem;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:.73rem;color:var(--gy);margin-top:.25rem">🔒 Lock</button>
+    </div>
+    <div class="at-row">
+      <button class="at act" id="at-pay" onclick="swAT('pay')">💳 Payments</button>
+      <button class="at" id="at-up" onclick="swAT('up')">📤 Book Upload</button>
+    </div>
+    <div id="adm-pay"><div id="pay-list"></div></div>
+    <div id="adm-up" style="display:none">
+      <div class="aw" style="margin:0;max-width:620px;padding:2rem">
+        <div class="fg"><label>Book Title</label><input type="text" id="bk-tt" placeholder="e.g. B.Sc 3rd Sem — Physics Important Questions 2024"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+          <div class="fg">
+            <label>Stream</label>
+            <select id="bk-st">
+              <option value="">— Stream —</option>
+              <option value="BA">BA</option>
+              <option value="BSc">B.Sc</option>
+              <option value="BCom">B.Com</option>
+              <option value="BCA">BCA</option>
+              <option value="BBA">BBA</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Semester</label>
+            <select id="bk-sm">
+              <option value="">— Semester —</option>
+              <option>Semester 1</option><option>Semester 2</option><option>Semester 3</option>
+              <option>Semester 4</option><option>Semester 5</option><option>Semester 6</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+          <div class="fg"><label>Subject</label><input type="text" id="bk-su" placeholder="Physics, Business Law..."></div>
+          <div class="fg"><label>Price (₹)</label><input type="number" id="bk-pr" placeholder="49"></div>
+        </div>
+        <div class="fg"><label>Category</label>
+          <select id="bk-ca"><option>Important Questions</option><option>Previous Year Papers</option><option>Study Notes</option><option>Mock Tests</option></select></div>
+        <div class="fg"><label>Content Type</label>
+          <div style="display:flex;gap:1.25rem;margin-top:.4rem">
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.86rem;font-weight:600"><input type="radio" name="ct" value="pdf" checked onchange="togCT('pdf')"> 📄 PDF Upload</label>
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.86rem;font-weight:600"><input type="radio" name="ct" value="html" onchange="togCT('html')"> 📝 HTML</label>
+          </div>
+        </div>
+        <div id="ct-pdf" class="fg">
+          <div class="dz" id="dz" onclick="document.getElementById('pdf-fi').click()"
+            ondragover="event.preventDefault();this.style.borderColor='var(--sf)'"
+            ondragleave="this.style.borderColor='var(--cr-d)'"
+            ondrop="hDrop(event)">
+            <div style="font-size:2rem;margin-bottom:.45rem">📄</div>
+            <div style="font-weight:700;color:var(--mr);margin-bottom:.2rem;font-size:.9rem">PDF drop karo ya click karo</div>
+            <div style="font-size:.72rem;color:var(--gy)">Max 10MB • .pdf only</div>
+            <input type="file" id="pdf-fi" accept=".pdf" style="display:none" onchange="hFS(this)">
+          </div>
+          <div id="pdf-sel" style="display:none;margin-top:.55rem;padding:.6rem 1rem;background:var(--gn-l);border:1.5px solid #7EC8A0;border-radius:10px;font-size:.8rem;font-weight:600;color:var(--gn)">✅ <span id="pdf-fn"></span></div>
+          <div id="up-prog" style="display:none;margin-top:.55rem">
+            <div style="display:flex;justify-content:space-between;font-size:.73rem;font-weight:700;color:var(--gy);margin-bottom:.3rem"><span>Firebase Storage mein upload...</span><span id="pp">0%</span></div>
+            <div class="pbw"><div class="pb" id="pb"></div></div>
+          </div>
+        </div>
+        <div id="ct-html" class="fg" style="display:none">
+          <label>HTML Content</label>
+          <textarea id="bk-co" rows="8" placeholder="<h2>Chapter 1</h2><p>Content...</p>"></textarea>
+        </div>
+        <button class="fbtn" id="up-btn" onclick="doUpload()">📤 Book Upload Karo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VIEWER -->
+<div class="view" id="view-viewer">
+  <div class="vw">
+    <div class="vw-hd">
+      <button class="vw-bk" onclick="nav('my-books')">← Wapas Library</button>
+      <div class="vw-tt" id="vw-tt"></div>
+      <div class="vw-wm" id="vw-wm"></div>
+    </div>
+    <div class="vw-bd" id="vw-bd" oncontextmenu="return false"></div>
+    <div class="vw-ft">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.35"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <p>Unauthorized sharing/screenshots se account turant band ho jaayega. Email aur IP log kiya ja raha hai.</p>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<footer>
+  <p>© 2026 <strong>PDSU Digital Library</strong> -
+  Pandit Deendayal Upadhyaya Shekhawati University<br>
+   | Developer: Giriraj Pareek | </p>
+</footer>
+
+<div id="pay-modal" style="display:none"></div>
+
+<!-- Floating Telegram Help Button -->
+<button class="fab" onclick="openTG()" title="Help chahiye? Telegram par message karo">
+  <div class="fab-tip">💬 Help chahiye?</div>
+  <svg viewBox="0 0 24 24"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.19 13.981l-2.965-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.963.578z"/></svg>
+</button>
+
+<script>
+// ═══════════════════════════════
+//  CONFIG — Change karo apna
+// ═══════════════════════════════
+const ADMIN_PASS = 'pdsu@admin2024';
+const UPI_ID     = '7727867614@postbank';
+const TG_BOT     = 'https://t.me/pdsu_library_help_bot';
+const TG_TOKEN   = '8425165206:AAEMqrkGBQ_W0XqbmRZdDmfr7hj-yOncPsE';
+// Apna Telegram user_id yahan daalo (admin notifications ke liye)
+// BotFather se @userinfobot par /start karo, user_id milega
+const TG_ADMIN_CHAT_ID = '5680821904';
+
+// ═══════════════════════════════
+//  STREAMS
+// ═══════════════════════════════
+const STREAMS = [
+  {id:'BA',   name:'BA',    emoji:'📜', full:'Bachelor of Arts'},
+  {id:'BSc',  name:'B.Sc',  emoji:'🔬', full:'Bachelor of Science'},
+  {id:'BCom', name:'B.Com', emoji:'📊', full:'Bachelor of Commerce'},
+  {id:'BCA',  name:'BCA',   emoji:'💻', full:'Bachelor of Computer Applications'},
+  {id:'BBA',  name:'BBA',   emoji:'💼', full:'Bachelor of Business Administration'},
+];
+const SEMS = ['Semester 1','Semester 2','Semester 3','Semester 4','Semester 5','Semester 6'];
+const GRADIENTS = ['#7B1D1D,#B84E00','#1A4A7A,#2E7AC8','#1A7A40,#2EAA60','#5A0F7A,#8E2EC8','#7A5A0F,#C89A2E'];
+const EMOJIS    = ['📘','📗','📙','📕','📓'];
+
+// State
+let _ss=null, _sem=null, _admUnlocked=false, _pdfFile=null, _selBook=null;
+
+// ═══════════════════════════════
+//  BOOT
+// ═══════════════════════════════
+function renderApp(){
+  document.getElementById('ls').classList.add('gone');
+  renderNav();
+  nav('home');
+}
+setTimeout(()=>{ if(!window._books){ window._books=[]; window._purchases=[]; renderApp(); } }, 5000);
+
+// ═══════════════════════════════
+//  NAV
+// ═══════════════════════════════
+function nav(v){
+  document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));
+  document.getElementById('view-'+v)?.classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+  if(v==='library')  renderLib();
+  if(v==='my-books') renderMyBooks();
+  if(v==='admin')    renderAdmin();
+  renderNav();
+}
+function renderNav(){
+  const u=window._cur;
+  const n=document.getElementById('hn');
+  n.innerHTML = u
+    ? `<button class="nb" onclick="nav('library')">Library</button>
+       <button class="nb" onclick="nav('my-books')">Mere Books</button>
+       ${u.isAdmin?`<button class="nb acc" onclick="nav('admin')">Admin</button>`:''}
+       <button class="nb tg" onclick="openTG()">💬 Help</button>
+       <button class="nb red" onclick="doLogout()">Logout</button>`
+    : `<button class="nb" onclick="nav('library')">Browse</button>
+       <button class="nb tg" onclick="openTG()">💬 Help</button>
+       <button class="nb" onclick="nav('login')">Login</button>
+       <button class="nb acc" onclick="nav('register')">Join Free</button>`;
+  const cta=document.getElementById('hero-cta');
+  if(cta) cta.innerHTML=u
+    ?`<button class="btn-p" onclick="nav('library')">Library Browse Karo →</button>`
+    :`<button class="btn-p" onclick="nav('register')">Register Karo — Free</button>
+      <button class="btn-s" onclick="nav('login')">Login</button>`;
+}
+
+// ═══════════════════════════════
+//  AUTH
+// ═══════════════════════════════
+async function doLogin(){
+  const e=v('li-e'),p=v('li-p'),b=document.getElementById('li-btn');
+  if(!e||!p)return toast('Email aur password dono bharein','err');
+  b.disabled=1;b.textContent='Login ho raha hai...';
+  try{await window.loginUser(e,p);nav('library');toast('Welcome back! 👋','ok');}
+  catch{toast('Galat email ya password!','err');}
+  b.disabled=0;b.textContent='Login Karo →';
+}
+async function doRegister(){
+  const n=v('rg-n'),e=v('rg-e'),p=v('rg-p'),b=document.getElementById('rg-btn');
+  if(!e||!p)return toast('Email aur password required','err');
+  b.disabled=1;b.textContent='Ban raha hai...';
+  try{await window.regUser(n,e,p);nav('library');toast('Account ban gaya! 🎉','ok');}
+  catch(er){toast(er.message||'Error!','err');}
+  b.disabled=0;b.textContent='Account Banao — Free 🎉';
+}
+async function doLogout(){await window.logoutUser();nav('home');toast('Logout ho gaye');}
+
+// ═══════════════════════════════
+//  LIBRARY — STREAM → SEM → BOOKS
+// ═══════════════════════════════
+function renderLib(){
+  renderBC();
+  if(!_ss){showStreams();}
+  else if(!_sem){showSems();}
+  else{showBooks();}
+}
+
+function renderBC(){
+  const bc=document.getElementById('bc');
+  let h=`<span class="bci" onclick="goHome()">🏠 Sabhi Streams</span>`;
+  if(_ss){const s=STREAMS.find(x=>x.id===_ss); h+=`<span class="bcs">›</span><span class="bci ${!_sem?'act':''}" onclick="goStream()">${s.emoji} ${s.name}</span>`;}
+  if(_sem)h+=`<span class="bcs">›</span><span class="bci act">${_sem}</span>`;
+  bc.innerHTML=h;
+}
+function goHome(){_ss=null;_sem=null;renderLib();}
+function goStream(){_sem=null;renderLib();}
+
+function showStreams(){
+  setHd('📚 Library','Apni stream choose karo — phir semester select karo');
+  show('pan-stream'); hide('pan-sem'); hideBooks();
+  const bks=window._books||[];
+  document.getElementById('pan-stream').innerHTML=`<div class="sg">${STREAMS.map(s=>{
+    const cnt=bks.filter(b=>b.stream===s.id).length;
+    return `<div class="sc" onclick="selStream('${s.id}')">
+      <span class="sc-e">${s.emoji}</span>
+      <span class="sc-n">${s.name}</span>
+      <span class="sc-c">${s.full}</span>
+      <span class="sc-c" style="margin-top:.25rem;font-weight:700;color:var(--sf)">${cnt} material${cnt!==1?'s':''}</span>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function selStream(id){_ss=id;_sem=null;renderLib();}
+
+function showSems(){
+  const s=STREAMS.find(x=>x.id===_ss);
+  setHd(`${s.emoji} ${s.name}`,`${s.full} — Semester choose karo`);
+  hide('pan-stream'); show('pan-sem'); hideBooks();
+  const bks=window._books||[];
+  document.getElementById('pan-sem').innerHTML=`
+    <p style="color:var(--gy);font-size:.84rem;margin-bottom:1rem;font-weight:500">Konsa semester hai tumhara?</p>
+    <div class="sem-row">${SEMS.map(sem=>{
+      const cnt=bks.filter(b=>b.stream===_ss&&b.semester===sem).length;
+      const has=cnt>0;
+      return `<button class="sp ${has?'act':'empty-sem'}" onclick="${has?`selSem('${sem}')`:''}">
+        ${sem} ${has?`<span style="font-size:.63rem;opacity:.75">(${cnt})</span>`:`<span style="font-size:.62rem;opacity:.4">—</span>`}
+      </button>`;
+    }).join('')}</div>`;
+}
+
+function selSem(sem){_sem=sem;renderLib();}
+
+function showBooks(){
+  const s=STREAMS.find(x=>x.id===_ss);
+  setHd(`${s.emoji} ${s.name} — ${_sem}`,`Study materials • Purchase karke access karo`);
+  hide('pan-stream'); hide('pan-sem');
+  const bp=document.getElementById('pan-books');
+  bp.style.display='grid';
+  const bks=(window._books||[]).filter(b=>b.stream===_ss&&b.semester===_sem);
+  if(!bks.length){bp.innerHTML=`<div class="empty"><div class="em">📭</div><p>${s.name} ${_sem} ke liye abhi koi material nahi hai.<br>Admin jald upload karega!</p></div>`;return;}
+  bp.innerHTML=bks.map(bk=>{
+    const st=getSt(bk.id);
+    const ci=Math.abs([...bk.id].reduce((a,c)=>a+c.charCodeAt(0),0))%5;
+    return `<div class="bk">
+      <div class="bk-cov" style="background:linear-gradient(135deg,${GRADIENTS[ci]})">${EMOJIS[ci]}
+        ${st==='approved'?`<div class="bk-tag t-own">✓ Owned</div>`:''}
+        ${st==='pending'?`<div class="bk-tag t-pen">⏳ Verifying</div>`:''}
+      </div>
+      <div class="bk-bd">
+        <div class="bk-tt">${esc(bk.title)}</div>
+        <div class="bk-mt">${bk.subject?esc(bk.subject):''}${bk.category?' • '+esc(bk.category):''}</div>
+        <div class="bk-ft">
+          <div class="bk-pr"><span>₹</span>${bk.price}</div>
+          ${st==='approved'
+            ?`<button class="btn-bk bb-open" onclick="openBook('${bk.id}')">Open →</button>`
+            :st==='pending'
+            ?`<button class="btn-bk bb-wait" disabled>Verifying...</button>`
+            :window._cur
+            ?`<button class="btn-bk bb-buy" onclick="openPay('${bk.id}')">Get Now</button>`
+            :`<button class="btn-bk bb-buy" onclick="nav('login')">Login to Buy</button>`
+          }
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function getSt(bid){const p=(window._purchases||[]).find(p=>p.bookId===bid);return p?p.status:null;}
+function setHd(h,s){document.getElementById('lib-h').textContent=h;document.getElementById('lib-s').textContent=s;}
+function show(id){document.getElementById(id).style.display='block';}
+function hide(id){document.getElementById(id).style.display='none';}
+function hideBooks(){document.getElementById('pan-books').style.display='none';}
+
+// ═══════════════════════════════
+//  PAYMENT MODAL
+// ═══════════════════════════════
+function openPay(bid){
+  if(!window._cur)return nav('login');
+  _selBook=(window._books||[]).find(b=>b.id===bid);
+  if(!_selBook)return;
+  const qr=`https://api.qrserver.com/v1/create-qr-code/?size=155x155&data=upi://pay?pa=${UPI_ID}%26pn=GIRIRAJ%20PAREEK%26am=${_selBook.price}%26cu=INR`;
+  document.getElementById('pay-modal').style.display='flex';
+  document.getElementById('pay-modal').className='mov';
+  document.getElementById('pay-modal').innerHTML=`
+  <div class="mo">
+    <h3>💳 Secure Payment</h3>
+    <p class="mo-sub">₹${_selBook.price} • "${esc(_selBook.title)}"</p>
+    <div class="qr-box"><img src="${qr}" alt="UPI QR" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22155%22 height=%22155%22><rect width=%22155%22 height=%22155%22 fill=%22%23eee%22/><text x=%2277%22 y=%2282%22 text-anchor=%22middle%22 fill=%22%23888%22 font-size=%2212%22>QR Load ho raha hai</text></svg>'"></div>
+    <div class="upi-l">GIRIRAJ PAREEK • IPPB • ${UPI_ID}</div>
+
+    <span class="utr-lb">Step 1: UPI pay karo → UTR No. (12 digits) milega</span>
+    <input class="utr-in" id="utr-i" type="text" maxlength="12" placeholder="000000000000" oninput="this.value=this.value.replace(/\\D/g,'');chkUTR()">
+
+    <p style="font-size:.7rem;color:var(--gy);text-align:left;margin-bottom:.65rem;line-height:1.5">
+      💡 <b>Fast approval chahiye?</b> Payment ka screenshot Telegram par bhejo ↓
+    </p>
+
+    <button class="tg-btn" onclick="sendTG()">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="white"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.19 13.981l-2.965-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.963.578z"/></svg>
+      📸 Screenshot Telegram Par Bhejo — Fast Approval!
+    </button>
+
+    <div class="m-acts">
+      <button class="btn-mc" onclick="closePay()">Cancel</button>
+      <button class="btn-mp" id="pay-btn" onclick="doPay()" disabled>✓ Verify UTR</button>
+    </div>
+  </div>`;
+}
+function chkUTR(){const b=document.getElementById('pay-btn');if(b)b.disabled=(document.getElementById('utr-i')?.value||'').length<12;}
+function closePay(){document.getElementById('pay-modal').style.display='none';}
+async function doPay(){
+  const utr=document.getElementById('utr-i').value.trim();
+  if(utr.length<12)return toast('12 digit UTR sahi se dalo','err');
+  const b=document.getElementById('pay-btn');
+  b.disabled=1;b.textContent='Submit ho raha hai...';
+  try{
+    await window.submitPayment(_selBook.id,_selBook.title,_selBook.price,utr);
+    // Telegram notification to admin (formatted Markdown alert)
+    await sendTelegramAlert(window._cur.email, _selBook.title, _selBook.price, utr);
+    closePay();
+    toast('Payment submit ho gaya! 1-2 ghante mein verify hoga ⏳','ok');
+    renderLib();
+  }catch{toast('Error! Dobara try karo.','err');}
+  b.disabled=0;b.textContent='✓ Verify UTR';
+}
+function sendTG(){
+  const u=window._cur, bk=_selBook;
+  const utr=document.getElementById('utr-i')?.value||'(UTR nahi diya abhi)';
+  const msg=encodeURIComponent(`🔔 Payment Screenshot\n\nStudent: ${u?.email}\nBook: ${bk?.title}\nAmount: ₹${bk?.price}\nUTR: ${utr}\n\n(Yahan payment screenshot attach karo)`);
+  window.open(`${TG_BOT}?start=payment_${bk?.id}`,'_blank');
+  toast('Telegram khul raha hai! Screenshot bhejo 📸','tg');
+}
+function openTG(){window.open(TG_BOT,'_blank');}
+
+// Telegram Bot API message sender
+async function sendTGMsg(text){
+  if(!TG_ADMIN_CHAT_ID)return;
+  try{await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:TG_ADMIN_CHAT_ID,text,parse_mode:'HTML'})});}catch{}
+}
+
+// ─── New Payment Alert (Markdown format) ───
+async function sendTelegramAlert(userEmail, bookTitle, amount, utr) {
+  const message = [
+    '🔔 *New Payment Alert*',
+    '--------------------------',
+    `📧 *Email:* ${userEmail}`,
+    `📚 *Book:* ${bookTitle}`,
+    `💰 *Amount:* ₹${amount}`,
+    `🔢 *UTR:* ${utr}`,
+    '--------------------------',
+    '✅ *Action:* Please verify in Admin Panel.'
+  ].join('\n');
+  const url = `https://api.telegram.org/bot${TG_TOKEN}/sendMessage?chat_id=${TG_ADMIN_CHAT_ID}&text=${encodeURIComponent(message)}&parse_mode=Markdown`;
+  try {
+    await fetch(url);
+    console.log("Telegram notification sent!");
+  } catch (error) {
+    console.error("Telegram Error:", error);
+  }
+}
+
+// ═══════════════════════════════
+//  MY BOOKS
+// ═══════════════════════════════
+function renderMyBooks(){
+  const approved=(window._purchases||[]).filter(p=>p.status==='approved').map(p=>p.bookId);
+  const bks=(window._books||[]).filter(b=>approved.includes(b.id));
+  const g=document.getElementById('my-g');
+  if(!bks.length){g.innerHTML=`<div class="empty" style="grid-column:1/-1"><div class="em">📭</div><p>Abhi koi book nahi hai.<br>Library se purchase karo!</p><br><button class="btn-p" onclick="nav('library')" style="margin:0 auto;margin-top:.5rem">Library Kholo →</button></div>`;return;}
+  g.innerHTML=bks.map(b=>{
+    const s=STREAMS.find(x=>x.id===b.stream);
+    return `<div class="mc">
+      <div style="font-size:1.9rem">${s?s.emoji:'📖'}</div>
+      <div class="mc-tt">${esc(b.title)}</div>
+      <div style="font-size:.7rem;color:var(--gy);font-weight:600">${b.stream||''}${b.semester?' • '+b.semester:''}</div>
+      <div class="mc-bg">✅ Unlocked</div>
+      <button class="btn-bk bb-open" style="width:100%;padding:.65rem" onclick="openBook('${b.id}')">Open Book →</button>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════
+//  BOOK VIEWER
+// ═══════════════════════════════
+function openBook(bid){
+  const bk=(window._books||[]).find(b=>b.id===bid);
+  if(!bk)return;
+  const ok=(window._purchases||[]).some(p=>p.bookId===bid&&p.status==='approved');
+  if(!ok&&!window._cur?.isAdmin)return toast('Access nahi hai! Payment verify karo.','err');
+  document.getElementById('vw-tt').textContent=bk.title;
+  document.getElementById('vw-wm').textContent=`🔒 Secure Reader • ${window._cur?.email}`;
+  const bd=document.getElementById('vw-bd');
+  if(bk.contentType==='pdf'||(bk.content?.startsWith('https://'))){
+    bd.innerHTML=`<iframe src="${esc(bk.content)}#toolbar=0&navpanes=0" style="width:100%;height:78vh;border:none;display:block" oncontextmenu="return false"></iframe>`;
+  }else{
+    bd.innerHTML=bk.content||'<p>Content abhi available nahi.</p>';
+  }
+  nav('viewer');
+}
+
+// ═══════════════════════════════
+//  ADMIN
+// ═══════════════════════════════
+function chkAdm(){
+  const inp=document.getElementById('adm-p');
+  if(inp.value===ADMIN_PASS){
+    _admUnlocked=1;
+    document.getElementById('adm-gate').style.display='none';
+    document.getElementById('adm-dash').style.display='block';
+    loadPayments(); toast('Dashboard unlock ho gaya ✅','ok');
+  }else{
+    inp.classList.remove('shake');void inp.offsetWidth;inp.classList.add('shake');
+    inp.value='';toast('Galat password!','err');
+    setTimeout(()=>inp.classList.remove('shake'),500);
+  }
+}
+function lockAdm(){
+  _admUnlocked=0;
+  document.getElementById('adm-gate').style.display='block';
+  document.getElementById('adm-dash').style.display='none';
+  document.getElementById('adm-p').value='';
+  toast('Dashboard lock ho gaya 🔒');
+}
+function renderAdmin(){
+  if(!window._cur?.isAdmin)return nav('home');
+  if(!_admUnlocked){
+    document.getElementById('adm-gate').style.display='block';
+    document.getElementById('adm-dash').style.display='none';
+    document.getElementById('adm-p').value='';
+  }else loadPayments();
+}
+async function loadPayments(){
+  const lst=document.getElementById('pay-list');
+  lst.innerHTML='<p style="color:var(--gy);padding:1rem">Load ho raha hai...</p>';
+  try{
+    const pays=await window.loadPending();
+    if(!pays.length){lst.innerHTML=`<div class="empty"><div class="em">✅</div><p>Koi pending payment nahi! Sab clear.</p></div>`;return;}
+    lst.innerHTML=pays.map(p=>`
+      <div class="pc" id="pc-${p.id}">
+        <div style="flex:1">
+          <div class="pc-em">${esc(p.userEmail)}</div>
+          <div class="pc-bk">${esc(p.bookTitle)}</div>
+          <div class="pc-ut">UTR: ${esc(p.utrNumber)} • ₹${p.amount}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:.4rem;align-items:flex-end">
+          <button class="btn-apr" onclick="doApprove('${p.id}','${esc(p.userEmail)}','${esc(p.bookTitle)}')">✓ Approve</button>
+          <a href="${TG_BOT}" target="_blank" style="font-size:.68rem;color:var(--tg);font-weight:700;text-decoration:none">Telegram Check →</a>
+        </div>
+      </div>`).join('');
+  }catch{lst.innerHTML='<p style="color:red;padding:1rem">Error! Refresh karo.</p>';}
+}
+async function doApprove(id,email,bookTitle){
+  try{
+    await window.approvePurchase(id);
+    document.getElementById('pc-'+id)?.remove();
+    // Notify student via Telegram (if they messaged bot)
+    if(TG_ADMIN_CHAT_ID) sendTGMsg(`✅ Approved!\n\nStudent: ${email}\nBook: ${bookTitle}\nAccess ab unlock hai!`);
+    toast('Payment approve! ✅','ok');
+  }catch{toast('Error approving','err');}
+}
+function swAT(t){
+  document.querySelectorAll('.at').forEach(x=>x.classList.remove('act'));
+  document.getElementById('at-'+t).classList.add('act');
+  document.getElementById('adm-pay').style.display=t==='pay'?'block':'none';
+  document.getElementById('adm-up').style.display=t==='up'?'block':'none';
+}
+
+// ═══════════════════════════════
+//  PDF UPLOAD
+// ═══════════════════════════════
+function togCT(v){
+  document.getElementById('ct-pdf').style.display=v==='pdf'?'block':'none';
+  document.getElementById('ct-html').style.display=v==='html'?'block':'none';
+}
+function hFS(inp){if(inp.files?.[0])setPDF(inp.files[0]);}
+function hDrop(e){e.preventDefault();document.getElementById('dz').style.borderColor='var(--cr-d)';if(e.dataTransfer.files?.[0])setPDF(e.dataTransfer.files[0]);}
+function setPDF(f){
+  if(!f.name.endsWith('.pdf'))return toast('Sirf PDF allowed!','err');
+  if(f.size>10*1024*1024)return toast('File 10MB se badi!','err');
+  _pdfFile=f;
+  document.getElementById('pdf-fn').textContent=f.name+' ('+(f.size/1024/1024).toFixed(2)+' MB)';
+  document.getElementById('pdf-sel').style.display='block';
+}
+async function doUpload(){
+  const tt=v('bk-tt'), st=v('bk-st'), sm=v('bk-sm'),
+        su=v('bk-su'), pr=v('bk-pr'), ca=v('bk-ca');
+  const ct=document.querySelector('input[name="ct"]:checked').value;
+  if(!tt)return toast('Title required hai','err');
+  if(!st)return toast('Stream choose karo','err');
+  if(!sm)return toast('Semester choose karo','err');
+  if(!pr)return toast('Price dalo','err');
+  const btn=document.getElementById('up-btn');
+  btn.disabled=1; let content='';
+  try{
+    if(ct==='pdf'){
+      if(!_pdfFile){toast('PDF file select karo','err');return btn.disabled=0;}
+      document.getElementById('up-prog').style.display='block';
+      btn.textContent='⏳ Upload ho rahi hai...';
+      content=await window.uploadPDF(_pdfFile,p=>{document.getElementById('pp').textContent=p+'%';document.getElementById('pb').style.width=p+'%';});
+      document.getElementById('up-prog').style.display='none';
+    }else{
+      content=v('bk-co');
+      if(!content){toast('Content dalo','err');return btn.disabled=0;}
+    }
+    await window.uploadBook({title:tt,stream:st,semester:sm,subject:su,category:ca,price:Number(pr),content,contentType:ct});
+    toast('Book upload ho gayi! 📚','ok');
+    ['bk-tt','bk-su','bk-pr','bk-co'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    document.getElementById('bk-st').value='';
+    document.getElementById('bk-sm').value='';
+    document.getElementById('pdf-sel').style.display='none';
+    _pdfFile=null;
+  }catch(er){toast('Error: '+(er.message||'Upload fail'),'err');}
+  btn.disabled=0;btn.textContent='📤 Book Upload Karo';
+}
+
+// ═══════════════════════════════
+//  UTILS
+// ═══════════════════════════════
+const v=id=>document.getElementById(id)?.value?.trim()||'';
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function toast(msg,type=''){
+  document.querySelector('.toast')?.remove();
+  const el=document.createElement('div');
+  el.className='toast '+(type||'');
+  el.textContent=msg;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(),3600);
+}
+
+nav('home');
+</script>
+</body>
+        </html>
