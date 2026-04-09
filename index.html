@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDSU Digital Library — Shekhawati University</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+           signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, collection, addDoc, getDocs, getDoc, query,
+           where, updateDoc, doc, deleteDoc, writeBatch }
+           from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getStorage, ref, uploadBytesResumable,
+           getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+
+  const cfg = {
+    apiKey:"AIzaSyBHFVlEkyAFLuMuYsbdBuHpr0OjyWmVQK4",
+    authDomain:"giriraj-pareek.firebaseapp.com",
+    projectId:"giriraj-pareek",
+    storageBucket:"giriraj-pareek.firebasestorage.app",
+    messagingSenderId:"364401883193",
+    appId:"1:364401883193:web:4c8f03ca3e5ceb31c235e8"
+  };
+  const app=initializeApp(cfg), auth=getAuth(app), db=getFirestore(app), stor=getStorage(app);
+  window._auth=auth; window._db=db; window._stor=stor;
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    onAuthStateChanged(auth,async user=>{
+      if(user){
+        window._cur={uid:user.uid,email:user.email,isAdmin:user.email==='admin@pdsu.ac.in',name:user.displayName||'Student'};
+        await loadPurchases(user.uid);
+      } else { window._cur=null; window._purchases=[]; }
+      await loadBooks(); await window.loadCombos(); renderApp();
+    });
+  });
+
+  window.loadBooks=async()=>{ try{ const s=await getDocs(collection(db,"books")); window._books=s.docs.map(d=>({id:d.id,...d.data()})); }catch{ window._books=[]; } };
+  window.loadPurchases=async uid=>{ try{ const s=await getDocs(query(collection(db,"purchases"),where("userId","==",uid))); window._purchases=s.docs.map(d=>({id:d.id,...d.data()})); }catch{ window._purchases=[]; } };
+  window.regUser=(n,e,p)=>createUserWithEmailAndPassword(auth,e,p);
+  window.loginUser=(e,p)=>signInWithEmailAndPassword(auth,e,p);
+  window.logoutUser=()=>signOut(auth);
+  window.uploadBook=async d=>{ await addDoc(collection(db,"books"),d); await loadBooks(); };
+  window.updateBook=async(id,d)=>{ await updateDoc(doc(db,"books",id),d); await loadBooks(); };
+
+  window.submitPayment=async(bId,bTitle,price,utr,screenshotUrl,extra)=>{
+    const u=window._cur;
+    const docRef=await addDoc(collection(db,"purchases"),{userId:u.uid,userEmail:u.email,bookId:bId,bookTitle:bTitle,amount:price,utrNumber:utr,screenshotUrl:screenshotUrl||null,status:'pending',createdAt:new Date(),...(extra||{})});
+    await loadPurchases(u.uid); return docRef;
+  };
+
+  window.approvePurchase=id=>updateDoc(doc(db,"purchases",id),{status:'approved',approvedAt:new Date()});
+  window.rejectPurchase=id=>updateDoc(doc(db,"purchases",id),{status:'rejected',rejectedAt:new Date()});
+
+  window.checkUTRExists=async(utr)=>{
+    try{ const s=await getDocs(query(collection(db,"purchases"),where("utrNumber","==",utr))); return !s.empty; }
+    catch(e){ console.error('checkUTRExists:',e); return false; }
+  };
+
+  window.loadPending=async()=>{ const s=await getDocs(query(collection(db,"purchases"),where("status","==","pending"))); return s.docs.map(d=>({id:d.id,...d.data()})); };
+
+  window.uploadPDF=(file,onP,folder)=>new Promise((res,rej)=>{
+    const nm=Date.now()+'_'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const t=uploadBytesResumable(ref(stor,(folder||'books')+'/'+nm),file);
+    t.on('state_changed',s=>onP&&onP(Math.round(s.bytesTransferred/s.totalBytes*100)),rej,async()=>res(await getDownloadURL(t.snapshot.ref)));
+  });
+  window.uploadScreenshot=(file,onP)=>window.uploadPDF(file,onP,'payment-screenshots');
+
+  window.createCoupon=async d=>{ await addDoc(collection(db,'coupons'),{...d,usedCount:0,createdAt:new Date()}); };
+  window.loadCoupons=async()=>{ const s=await getDocs(collection(db,'coupons')); return s.docs.map(d=>({id:d.id,...d.data()})); };
+  window.deleteCoupon=async id=>{ try{ await deleteDoc(doc(db,'coupons',id)); }catch{ await updateDoc(doc(db,'coupons',id),{active:false}); } };
+  window.validateCoupon=async code=>{
+    try{
+      const s=await getDocs(query(collection(db,'coupons'),where('code','==',code.toUpperCase()),where('active','==',true)));
+      if(s.empty) return null;
+      const d=s.docs[0]; const cp={id:d.id,...d.data()};
+      if(cp.maxUses>0&&cp.usedCount>=cp.maxUses) return null;
+      return cp;
+    }catch(e){ return null; }
+  };
+  window.useCoupon=async id=>{
+    try{ const ref2=doc(db,'coupons',id); const snap=await getDoc(ref2); if(snap.exists()) await updateDoc(ref2,{usedCount:(snap.data().usedCount||0)+1}); return true; }
+    catch(e){ return false; }
+  };
+
+  window.saveCombo=async(stream,semester,price)=>{
+    const s=await getDocs(query(collection(db,'combos'),where('stream','==',stream),where('semester','==',semester)));
+    if(!s.empty){ await updateDoc(doc(db,'combos',s.docs[0].id),{price:Number(price),active:true}); }
+    else{ await addDoc(collection(db,'combos'),{stream,semester,price:Number(price),active:true}); }
+  };
+  window.loadCombos=async()=>{ try{ const s=await getDocs(collection(db,'combos')); window._combos=s.docs.map(d=>({id:d.id,...d.data()})); }catch{ window._combos=[]; } };
+
+  window.submitComboPurchase=async(stream,semester,bookIds,price,utr,screenshotUrl)=>{
+    const u=window._cur;
+    const docRef=await addDoc(collection(db,'purchases'),{userId:u.uid,userEmail:u.email,bookId:'COMBO_'+stream+'_'+semester,bookTitle:stream+' '+semester+' — Complete Bundle',bookIds,amount:price,utrNumber:utr,screenshotUrl:screenshotUrl||null,status:'pending',isCombo:true,stream,semester,createdAt:new Date()});
+    await loadPurchases(u.uid); return docRef;
+  };
+
+  window.approveCombo=async id=>{
+    const snap=await getDoc(doc(db,'purchases',id));
+    const p=snap.data();
+    const batch=writeBatch(db);
+    if(p?.isCombo&&p.bookIds){
+      for(const bid of p.bookIds){
+        const existing=await getDocs(query(collection(db,'purchases'),where('userId','==',p.userId),where('bookId','==',bid),where('status','==','approved')));
+        if(existing.empty){ const newRef=doc(collection(db,'purchases')); batch.set(newRef,{userId:p.userId,userEmail:p.userEmail,bookId:bid,bookTitle:'(via Combo)',amount:0,utrNumber:p.utrNumber,status:'approved',comboRef:id,createdAt:new Date()}); }
+      }
+    }
+    if(p?.isUnitBundle&&p.unitBookIds){
+      for(const bid of p.unitBookIds){
+        const existing=await getDocs(query(collection(db,'purchases'),where('userId','==',p.userId),where('bookId','==',bid),where('status','==','approved')));
+        if(existing.empty){ const newRef=doc(collection(db,'purchases')); batch.set(newRef,{userId:p.userId,userEmail:p.userEmail,bookId:bid,bookTitle:'(via Unit Bundle)',amount:0,utrNumber:p.utrNumber,status:'approved',bundleRef:id,createdAt:new Date()}); }
+      }
+    }
+    batch.update(doc(db,'purchases',id),{status:'approved',approvedAt:new Date()});
+    await batch.commit();
+  };
+</script>
+</head>
+<body>
+
+<div id="ls">
+  <div class="ll">📚 PDSU Library</div>
+  <div class="lb"></div>
+  <p style="color:rgba(255,255,255,.4);font-size:.68rem;margin-top:1rem;letter-spacing:2px;font-family:'DM Sans',sans-serif">LOADING...</p>
+</div>
+
+<header>
+  <div class="hi">
+    <div class="logo" onclick="nav('home')">
+      <div class="logo-n">PDSU LIBRARY</div>
+      <div class="logo-s">Shekhawati University</div>
+    </div>
+    <nav id="hn"></nav>
+  </div>
+</header>
+
+<main>
+
+<!-- HOME -->
+<div class="view" id="view-home">
+  <div class="hero">
+    <div class="badge">🎓 Exam 2026</div>
+    <h1>SUCCESS<br><em>STARTS</em><br>HERE.</h1>
+    <p class="hero-sub">UG, PG, Other Exams & YT Classes — apni category aur subject ke Important Questions, Notes aur PYQ papers ek jagah par.</p>
+    <div class="cta-g" id="hero-cta"></div>
+    <div class="stats-r">
+      <div class="stat"><div class="stat-n">4</div><div class="stat-l">Categories</div></div>
+      <div class="stat"><div class="stat-n">6</div><div class="stat-l">Semesters</div></div>
+      <div class="stat"><div class="stat-n">Unit</div><div class="stat-l">Wise Access</div></div>
+      <div class="stat"><div class="stat-n">24/7</div><div class="stat-l">Access</div></div>
+    </div>
+    <div class="tg-banner">
+      <span>💬</span>
+      <span style="font-size:.8rem;color:var(--ink-m)">Koi help chahiye?</span>
+      <a href="https://t.me/PdusuLibraryHelpline" target="_blank" rel="noopener">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="#2AABEE" style="flex-shrink:0"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.94z"/></svg>
+        @PdusuLibraryHelpline
+      </a>
+    </div>
+  </div>
+  <div style="text-align:center;margin:1.5rem 0;color:var(--gd);font-size:1.2rem;letter-spacing:.5rem;opacity:.4">⊹ ⊹ ⊹</div>
+  <div class="fts">
+    <div class="fc"><div class="fc-i">🎓</div><div class="fc-t">UG + PG Courses</div><div class="fc-d">BA, B.Sc, B.Com, BCA, BBA aur sabhi PG courses. Stream, semester aur subject wise browse karo.</div></div>
+    <div class="fc"><div class="fc-i">📐</div><div class="fc-t">Unit-Wise Purchase</div><div class="fc-d">Sirf wahi unit kharido jo chahiye. Ya saari units ka bundle lo — 5 rupaye extra bachao!</div></div>
+    <div class="fc"><div class="fc-i">🎯</div><div class="fc-t">Other Exams</div><div class="fc-d">REET, SI, Patwari, Rajasthan GK aur anya competitive exams ke liye direct subject-wise material.</div></div>
+    <div class="fc"><div class="fc-i">▶️</div><div class="fc-t">YT Classes FREE</div><div class="fc-d">YouTube classes sabko free mein milti hain. PDF companion notes purchase karke padhai poori karo.</div></div>
+  </div>
+</div>
+
+<!-- LOGIN -->
+<div class="view" id="view-login">
+  <div class="aw">
+    <h2>Wapas Aao! 👋</h2>
+    <p>Library access karne ke liye login karo</p>
+    <div class="fg"><label>Email</label><input type="email" id="li-e" placeholder="tumhara@email.com"></div>
+    <div class="fg"><label>Password</label><input type="password" id="li-p" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="fbtn" id="li-btn" onclick="doLogin()">Login Karo →</button>
+    <div class="asw">Naye ho? <a onclick="nav('register')">Account Banao</a></div>
+  </div>
+</div>
+
+<!-- REGISTER -->
+<div class="view" id="view-register">
+  <div class="aw">
+    <h2>Join PDSU Library</h2>
+    <p>Apna free student account banao abhi</p>
+    <div class="fg"><label>Pura Naam</label><input type="text" id="rg-n" placeholder="Ramesh Kumar"></div>
+    <div class="fg"><label>Email</label><input type="email" id="rg-e" placeholder="ramesh@gmail.com"></div>
+    <div class="fg"><label>Password Banao</label><input type="password" id="rg-p" placeholder="Min. 6 characters" onkeydown="if(event.key==='Enter')doRegister()"></div>
+    <button class="fbtn" id="rg-btn" onclick="doRegister()">Account Banao — Free 🎉</button>
+    <div class="asw">Pehle se account hai? <a onclick="nav('login')">Login karo</a></div>
+  </div>
+</div>
+
+<!-- LIBRARY -->
+<div class="view" id="view-library">
+  <div id="lib-hd">
+    <h2 class="ph" id="lib-h">📚 Library</h2>
+    <p class="ps" id="lib-s">Category choose karo</p>
+  </div>
+  <div class="bc" id="bc"></div>
+  <div class="cat-tabs" id="cat-tabs" style="display:none"></div>
+  <div id="pan-stream"></div>
+  <div id="pan-sem" style="display:none"></div>
+  <div id="pan-subjects" style="display:none"></div>
+  <div id="pan-units" style="display:none"></div>
+  <div class="bg" id="pan-books" style="display:none"></div>
+  <div id="pan-yt" style="display:none"></div>
+  <div id="pan-other" style="display:none"></div>
+</div>
+
+<!-- MY BOOKS -->
+<div class="view" id="view-my-books">
+  <div class="mybooks-hd">
+    <div>
+      <h2 class="ph">📖 Mere Books</h2>
+      <p class="ps" style="margin-bottom:0">Tumhara purchased aur unlocked content</p>
+    </div>
+    <button class="clear-dismissals-btn" id="clear-dismissals-btn" onclick="clearAllDismissals()">↺ Notices wapas dikhao</button>
+  </div>
+  <div id="my-rej-section" style="margin-top:1.25rem"></div>
+  <div class="mg" id="my-g" style="margin-top:1rem"></div>
+</div>
+
+<!-- ADMIN -->
+<div class="view" id="view-admin">
+  <div id="adm-gate" class="ag">
+    <div style="font-size:2.5rem;margin-bottom:.65rem">🔐</div>
+    <h2>Admin Access</h2>
+    <p>Password enter karo dashboard unlock karne ke liye</p>
+    <div class="fg" style="text-align:left"><label>Admin Password</label>
+      <input type="password" id="adm-p" placeholder="••••••••" onkeydown="if(event.key==='Enter')chkAdm()"></div>
+    <button class="fbtn" style="margin-top:.35rem" onclick="chkAdm()">Dashboard Kholo →</button>
+  </div>
+  <div id="adm-dash" style="display:none">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.75rem;flex-wrap:wrap;gap:1rem">
+      <div><h2 class="ph">Admin Dashboard</h2><p class="ps" style="margin:0">Payments verify karo, books upload karo</p></div>
+      <button onclick="lockAdm()" style="background:var(--cr-d);border:none;cursor:pointer;padding:.4rem .9rem;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:.73rem;color:var(--gy);margin-top:.25rem">🔒 Lock</button>
+    </div>
+    <div class="at-row">
+      <button class="at act" id="at-pay" onclick="swAT('pay')">💳 Payments</button>
+      <button class="at" id="at-up" onclick="swAT('up')">📤 Upload</button>
+      <button class="at" id="at-edit" onclick="swAT('edit')">✏️ Edit Books</button>
+      <button class="at" id="at-coup" onclick="swAT('coup')">🎟️ Coupons</button>
+      <button class="at" id="at-combo" onclick="swAT('combo')">📦 Combos</button>
+    </div>
+    <div id="adm-pay"><div id="pay-list"></div></div>
+
+    <!-- UPLOAD PANEL -->
+    <div id="adm-up" style="display:none">
+      <div class="aw" style="margin:0;max-width:700px;padding:2rem">
+        <h3 style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--mr);font-weight:900;margin-bottom:1.2rem">📤 New Material Upload</h3>
+        <div class="fg"><label>Title</label><input type="text" id="bk-tt" placeholder="e.g. B.Sc 3rd Sem — Physics Unit 1 — Mechanics"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+          <div class="fg"><label>Category</label>
+            <select id="bk-cat" onchange="onCatChange()">
+              <option value="">— Category —</option>
+              <option value="UG">UG (BA/B.Sc/B.Com/BCA/BBA)</option>
+              <option value="PG">PG All Courses</option>
+              <option value="OTHER">Other Exams</option>
+              <option value="YT">YT Classes</option>
+            </select>
+          </div>
+          <div class="fg" id="fg-stream"><label>Stream</label>
+            <select id="bk-st">
+              <option value="">— Stream —</option>
+              <option value="BA">BA</option><option value="BSc">B.Sc</option>
+              <option value="BCom">B.Com</option><option value="BCA">BCA</option>
+              <option value="BBA">BBA</option><option value="MA">MA</option>
+              <option value="MSc">M.Sc</option><option value="MCom">M.Com</option>
+              <option value="MCA">MCA</option><option value="MBA">MBA</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem" id="fg-sem-row">
+          <div class="fg"><label>Semester</label>
+            <select id="bk-sm">
+              <option value="">— Semester —</option>
+              <option>Semester 1</option><option>Semester 2</option><option>Semester 3</option>
+              <option>Semester 4</option><option>Semester 5</option><option>Semester 6</option>
+            </select>
+          </div>
+          <div class="fg"><label>Subject</label><input type="text" id="bk-su" placeholder="Physics, Business Law..."></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
+          <div class="fg"><label>Unit Number</label>
+            <select id="bk-unit">
+              <option value="All">All Units</option>
+              <option value="1">Unit 1</option><option value="2">Unit 2</option>
+              <option value="3">Unit 3</option><option value="4">Unit 4</option>
+            </select>
+          </div>
+          <div class="fg"><label>PDF Price (₹)</label><input type="number" id="bk-pr" placeholder="49"></div>
+          <div class="fg"><label>Content Category</label>
+            <select id="bk-ca"><option>Important Questions</option><option>Previous Year Papers</option><option>Study Notes</option><option>Mock Tests</option></select>
+          </div>
+        </div>
+        <div class="fg" style="border:2px solid #FFCCCC;border-radius:12px;padding:.9rem;background:#FFF8F8">
+          <label style="color:#CC0000">▶ YouTube Class Link <span style="font-weight:400;font-size:.65rem;letter-spacing:0;text-transform:none;color:var(--gy)">(FREE — Public)</span></label>
+          <input type="url" id="bk-yt" placeholder="https://youtube.com/watch?v=..." style="margin-top:.3rem">
+          <p style="font-size:.68rem;color:var(--gy);margin-top:.3rem">🆓 Yeh link sabko FREE mein dikhega</p>
+        </div>
+        <div class="fg"><label>Premium Content Type</label>
+          <div style="display:flex;gap:1.25rem;margin-top:.4rem;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.86rem;font-weight:600"><input type="radio" name="ct" value="pdf" checked onchange="togCT('pdf')"> 📄 PDF Upload</label>
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.86rem;font-weight:600"><input type="radio" name="ct" value="drive" onchange="togCT('drive')"> 🔗 Google Drive URL</label>
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.86rem;font-weight:600"><input type="radio" name="ct" value="html" onchange="togCT('html')"> 📝 HTML</label>
+            <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.86rem;font-weight:600"><input type="radio" name="ct" value="none" onchange="togCT('none')"> 🚫 No PDF (YT only)</label>
+          </div>
+        </div>
+        <div id="ct-pdf" class="fg">
+          <div class="dz" id="dz" onclick="document.getElementById('pdf-fi').click()" ondragover="event.preventDefault();this.style.borderColor='var(--sf)'" ondragleave="this.style.borderColor='var(--cr-d)'" ondrop="hDrop(event)">
+            <div style="font-size:2rem;margin-bottom:.45rem">📄</div>
+            <div style="font-weight:700;color:var(--mr);margin-bottom:.2rem;font-size:.9rem">PDF drop karo ya click karo</div>
+            <div style="font-size:.72rem;color:var(--gy)">Max 10MB • .pdf only</div>
+            <input type="file" id="pdf-fi" accept=".pdf" style="display:none" onchange="hFS(this)">
+          </div>
+          <div id="pdf-sel" style="display:none;margin-top:.55rem;padding:.6rem 1rem;background:var(--gn-l);border:1.5px solid #7EC8A0;border-radius:10px;font-size:.8rem;font-weight:600;color:var(--gn)">✅ <span id="pdf-fn"></span></div>
+          <div id="up-prog" style="display:none;margin-top:.55rem">
+            <div style="display:flex;justify-content:space-between;font-size:.73rem;font-weight:700;color:var(--gy);margin-bottom:.3rem"><span>Firebase Storage mein upload...</span><span id="pp">0%</span></div>
+            <div class="pbw"><div class="pb" id="pb"></div></div>
+          </div>
+        </div>
+        <div id="ct-drive" class="fg" style="display:none">
+          <label>Google Drive / External URL</label>
+          <input type="url" id="bk-drive" placeholder="https://drive.google.com/file/d/..." style="font-family:'JetBrains Mono',monospace;font-size:.82rem">
+          <p style="font-size:.7rem;color:var(--gy);margin-top:.4rem">💡 Drive link mein "Anyone with link can view" permission honi chahiye</p>
+        </div>
+        <div id="ct-html" class="fg" style="display:none">
+          <label>HTML Content</label>
+          <textarea id="bk-co" rows="8" placeholder="<h2>Chapter 1</h2><p>Content...</p>"></textarea>
+        </div>
+        <div id="ct-none" style="display:none;padding:.7rem;background:var(--yt-l);border-radius:10px;font-size:.78rem;color:#880000;font-weight:600;margin-bottom:1rem">
+          ▶ Sirf YouTube link hai, koi PDF nahi hogi. Price 0 set karo.
+        </div>
+        <button class="fbtn" id="up-btn" onclick="doUpload()">📤 Upload Karo</button>
+      </div>
+    </div>
+
+    <!-- EDIT BOOKS -->
+    <div id="adm-edit" style="display:none">
+      <div style="margin-bottom:1rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+        <input type="text" id="edit-search" placeholder="Search by title..." oninput="renderEditList()" style="flex:1;padding:.7rem 1rem;border:2px solid var(--cr-d);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:.86rem;background:var(--cr);color:var(--ink);outline:none;min-width:200px">
+        <select id="edit-cat-filter" onchange="renderEditList()" style="padding:.7rem 1rem;border:2px solid var(--cr-d);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:.86rem;background:var(--cr);color:var(--ink);outline:none">
+          <option value="">All Categories</option><option value="UG">UG</option><option value="PG">PG</option><option value="OTHER">Other Exams</option><option value="YT">YT Classes</option>
+        </select>
+      </div>
+      <div id="edit-book-list"></div>
+    </div>
+
+    <!-- COMBOS -->
+    <div id="adm-combo" style="display:none">
+      <div style="margin-bottom:1.25rem">
+        <h3 style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--mr);font-weight:900;margin-bottom:.3rem">📦 Semester Combo Prices Set Karo</h3>
+        <p style="font-size:.8rem;color:var(--gy);line-height:1.5">Har stream + semester ke liye combo price set karo.</p>
+      </div>
+      <div class="combo-grid" id="combo-admin-grid"></div>
+    </div>
+
+    <!-- COUPONS -->
+    <div id="adm-coup" style="display:none">
+      <div class="coup-form">
+        <h3 style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--mr);margin-bottom:1rem;font-weight:900">➕ Naya Coupon Banao</h3>
+        <div class="coup-form-grid">
+          <div class="fg" style="margin:0"><label>Code</label><input type="text" id="cp-code" placeholder="EXAM2024" style="text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:2px" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"></div>
+          <div class="fg" style="margin:0"><label>Type</label><select id="cp-type"><option value="percent">% Off</option><option value="flat">₹ Flat</option></select></div>
+          <div class="fg" style="margin:0"><label>Value</label><input type="number" id="cp-val" placeholder="20" min="1"></div>
+          <div class="fg" style="margin:0"><label>Max Uses (0=∞)</label><input type="number" id="cp-max" placeholder="0" min="0" value="0"></div>
+        </div>
+        <button class="fbtn" style="margin-top:1rem;max-width:220px" onclick="doCreateCoupon()">🎟️ Create Coupon</button>
+      </div>
+      <h3 style="font-family:'Playfair Display',serif;font-size:1rem;color:var(--mr);margin-bottom:.85rem;font-weight:900">📋 Active Coupons</h3>
+      <div id="coup-list"><p style="color:var(--gy);font-size:.84rem">Load ho raha hai...</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- VIEWER -->
+<div class="view" id="view-viewer">
+  <div class="vw">
+    <div class="vw-hd">
+      <button class="vw-bk" id="vw-back-btn">← Wapas</button>
+      <div class="vw-tt" id="vw-tt"></div>
+      <div class="vw-wm" id="vw-wm"></div>
+    </div>
+    <div class="vw-bd" id="vw-bd" oncontextmenu="return false"></div>
+    <div class="vw-ft">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.35"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <p>Unauthorized sharing/screenshots se account turant band ho jaayega. Email aur IP log kiya ja raha hai.</p>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<footer>
+  <p>© 2026 <strong>PDSU Digital Library</strong> — Pandit Deendayal Upadhyaya Shekhawati University<br>
+  Powered by Firebase | Developer: Giriraj Pareek<br>
+  📱 Help: <a href="https://t.me/PdusuLibraryHelpline" target="_blank" rel="noopener">@PdusuLibraryHelpline</a> on Telegram</p>
+</footer>
+
+<div id="pay-modal" style="display:none"></div>
+<div id="edit-modal" style="display:none"></div>
+
+<script src="script.js"></script>
+</body>
+        </html>
