@@ -512,7 +512,12 @@ function showPayModal(){
   const qr=`https://api.qrserver.com/v1/create-qr-code/?size=155x155&data=upi://pay?pa=${UPI_ID}%26pn=GIRIRAJ%20PAREEK%26am=${price}%26cu=INR`;
   const payNowHtml=mobile
     ?`<a href="${esc(upiLink)}" id="pay-now-link" style="display:block;text-decoration:none"><button class="pay-now-btn pay-now-mobile" onclick="onMobilePayTap()"><span>📱</span><div><div>Pay Now — ₹${price}</div><div class="pay-now-label">UPI App mein open hoga</div></div></button></a>`
-    
+    :`<div class="ss-section"><span class="ss-label">📸 Payment Screenshot Upload Karo (Optional)</span>
+      <div class="ss-dz" id="ss-dz" onclick="document.getElementById('ss-fi').click()">
+        <input type="file" id="ss-fi" accept="image/*" style="display:none;position:absolute;inset:0;opacity:0;cursor:pointer" onchange="handleSSFile(this)">
+        <div style="font-size:1.5rem;margin-bottom:.3rem">🖼️</div>
+        <div class="ss-dz-txt">Screenshot yahan drop karo ya click karo</div>
+        <div class="ss-dz-sub">JPG, PNG • Max 5MB</div>
       </div>
       <div id="ss-preview" style="display:none;padding:.55rem .75rem;background:var(--gn-l);border:1.5px solid #7EC8A0;border-radius:10px;font-size:.78rem;font-weight:600;color:var(--gn);margin-top:.5rem">✅ <span id="ss-fn"></span></div>
       <div id="ss-progress" style="display:none;margin-top:.5rem"><div class="ss-prog-bar"><div class="ss-prog-fill" id="ss-prog-fill"></div></div></div>
