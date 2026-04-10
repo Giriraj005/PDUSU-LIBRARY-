@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="style.css">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
@@ -61,6 +62,7 @@
   };
 
   window.loadPending=async()=>{ const s=await getDocs(query(collection(db,"purchases"),where("status","==","pending"))); return s.docs.map(d=>({id:d.id,...d.data()})); };
+  window.loadAllPurchases=async()=>{ const s=await getDocs(collection(db,"purchases")); return s.docs.map(d=>({id:d.id,...d.data()})); };
 
   window.uploadPDF=(file,onP,folder)=>new Promise((res,rej)=>{
     const nm=Date.now()+'_'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
@@ -237,9 +239,40 @@
     <button class="fbtn" style="margin-top:.35rem" onclick="chkAdm()">Dashboard Kholo →</button>
   </div>
   <div id="adm-dash" style="display:none">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.75rem;flex-wrap:wrap;gap:1rem">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem">
       <div><h2 class="ph">Admin Dashboard</h2><p class="ps" style="margin:0">Payments verify karo, books upload karo</p></div>
       <button onclick="lockAdm()" style="background:var(--cr-d);border:none;cursor:pointer;padding:.4rem .9rem;border-radius:8px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:.73rem;color:var(--gy);margin-top:.25rem">🔒 Lock</button>
+    </div>
+    <!-- EARNINGS STATS STRIP -->
+    <div class="adm-stats-row" id="adm-stats-row">
+      <div class="adm-stat-card adm-stat-earn">
+        <div class="adm-stat-icon">💰</div>
+        <div class="adm-stat-body">
+          <div class="adm-stat-label">Total Earnings</div>
+          <div class="adm-stat-val" id="stat-earn">—</div>
+        </div>
+      </div>
+      <div class="adm-stat-card adm-stat-ok">
+        <div class="adm-stat-icon">✅</div>
+        <div class="adm-stat-body">
+          <div class="adm-stat-label">Approved Orders</div>
+          <div class="adm-stat-val" id="stat-approved">—</div>
+        </div>
+      </div>
+      <div class="adm-stat-card adm-stat-pend">
+        <div class="adm-stat-icon">⏳</div>
+        <div class="adm-stat-body">
+          <div class="adm-stat-label">Pending Payments</div>
+          <div class="adm-stat-val" id="stat-pending">—</div>
+        </div>
+      </div>
+      <div class="adm-stat-card adm-stat-bk">
+        <div class="adm-stat-icon">📚</div>
+        <div class="adm-stat-body">
+          <div class="adm-stat-label">Total Books</div>
+          <div class="adm-stat-val" id="stat-books">—</div>
+        </div>
+      </div>
     </div>
     <div class="at-row">
       <button class="at act" id="at-pay" onclick="swAT('pay')">💳 Payments</button>
@@ -408,4 +441,4 @@
 
 <script src="script.js"></script>
 </body>
-        </html>
+</html>
