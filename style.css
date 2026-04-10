@@ -559,3 +559,45 @@ footer a:hover{text-decoration:underline}
   .btn-yt-watch,.btn-unit-buy,.btn-unit-open,.btn-unit-pend,.btn-unit-rej{width:100%;justify-content:center;text-align:center}
   .rej-dismiss-btn{margin-top:.4rem}
   }
+
+/* ═══════════════════════════════════════════
+   MEDIUM SELECTION — Hindi / English
+═══════════════════════════════════════════ */
+.medium-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-top:.5rem}
+.medium-card{border-radius:18px;padding:2rem 1.5rem;text-align:center;border:2.5px solid var(--cr-d);transition:all .22s;position:relative;overflow:hidden}
+.medium-card.active-medium:hover{transform:translateY(-4px);box-shadow:0 12px 35px rgba(0,0,0,.12)}
+.medium-card.hindi-medium.active-medium{background:linear-gradient(135deg,#FFF5F5,#FFF0E8);border-color:#E07030}
+.medium-card.english-medium.active-medium{background:linear-gradient(135deg,#F0F5FF,#E8F0FF);border-color:#2860C0}
+.medium-card.empty-medium{background:var(--cr);border-color:var(--cr-d)}
+.medium-emoji{font-size:2.8rem;margin-bottom:.6rem;display:block}
+.medium-name{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:900;color:var(--ink);margin-bottom:.35rem}
+.medium-card.hindi-medium.active-medium .medium-name{color:#B84E00}
+.medium-card.english-medium.active-medium .medium-name{color:#1A4A7A}
+.medium-count{font-size:.78rem;color:var(--gy);font-weight:600;margin-bottom:.7rem}
+.medium-arrow{font-size:.76rem;font-weight:800;padding:.35rem .9rem;border-radius:20px;display:inline-block;letter-spacing:.3px}
+.hindi-medium.active-medium .medium-arrow{background:#E07030;color:#fff}
+.english-medium.active-medium .medium-arrow{background:#2860C0;color:#fff}
+.medium-soon{font-size:.72rem;font-weight:700;color:var(--gy);background:var(--cr-d);padding:.3rem .8rem;border-radius:20px;display:inline-block}
+
+/* Medium badge on book cards */
+.medium-badge{display:inline-flex;align-items:center;gap:.25rem;font-size:.62rem;font-weight:800;padding:.2rem .55rem;border-radius:20px;letter-spacing:.3px;margin-left:.4rem;vertical-align:middle}
+.medium-badge.hindi{background:#FFF0E8;color:#B84E00;border:1px solid #E07030}
+.medium-badge.english{background:#E8F0FF;color:#1A4A7A;border:1px solid #2860C0}
+
+/* Edit list medium tag */
+.pc-medium{font-size:.62rem;font-weight:800;padding:.15rem .45rem;border-radius:8px;display:inline-block}
+.pc-medium.hindi{background:#FFF0E8;color:#B84E00}
+.pc-medium.english{background:#E8F0FF;color:#1A4A7A}
+
+/* Dark mode */
+body.dark .medium-card.hindi-medium.active-medium{background:linear-gradient(135deg,#2A1510,#2A1800)}
+body.dark .medium-card.english-medium.active-medium{background:linear-gradient(135deg,#0F1A2A,#101828)}
+body.dark .medium-badge.hindi{background:#2A1510;color:#E07030}
+body.dark .medium-badge.english{background:#0F1A2A;color:#6090E0}
+
+@media(max-width:640px){
+  .medium-grid{grid-template-columns:1fr 1fr;gap:.75rem}
+  .medium-card{padding:1.4rem 1rem}
+  .medium-emoji{font-size:2.2rem}
+  .medium-name{font-size:.9rem}
+}
