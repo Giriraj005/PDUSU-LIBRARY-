@@ -6,6 +6,31 @@ const UPI_ID     = '7727867614@postbank';
 const TG_HANDLE  = 'https://t.me/PdusuLibraryHelpline';
 const DISMISSED_KEY = 'pdsu_dismissed_rejections';
 
+// ── Supabase (screenshot uploads only) ──────────────────────────────────────
+const SUPA_URL    = 'https://tsrwhcedolnhciixptpe.supabase.co';
+const SUPA_KEY    = 'sb_publishable_KsaHhELzQ5o-zZEgzf-RAQ_LIwp7eSE';
+const SUPA_BUCKET = 'payment-screenshots';
+let _supaClient   = null;
+function getSupabase(){
+  if(_supaClient) return _supaClient;
+  _supaClient = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+  return _supaClient;
+}
+async function uploadScreenshotSupabase(file, onProgress){
+  const sb  = getSupabase();
+  const ext = (file.name.split('.').pop()||'jpg').replace(/[^a-zA-Z0-9]/g,'jpg').substring(0,5);
+  const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  onProgress && onProgress(30);
+  const { data, error } = await sb.storage.from(SUPA_BUCKET).upload(fileName, file,
+    { cacheControl:'3600', upsert:false, contentType:file.type });
+  if(error) throw new Error('Screenshot upload failed: ' + error.message);
+  onProgress && onProgress(90);
+  const { data: urlData } = sb.storage.from(SUPA_BUCKET).getPublicUrl(fileName);
+  onProgress && onProgress(100);
+  return urlData.publicUrl;
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 // ═══════════════════════════════════════════
 //  DATA
 // ═══════════════════════════════════════════
@@ -506,60 +531,107 @@ function openComboPay(stream,sem){
 }
 
 function showPayModal(){
-  const price=_selBook.price;
+  const price=_finalPrice>0?_finalPrice:Number(_selBook.price);
   const mobile=isMobile();
-  const upiLink=`upi://pay?pa=${encodeURIComponent(UPI_ID)}&pn=GIRIRAJ%20PAREEK&am=${price}&cu=INR&tn=${encodeURIComponent(_selBook.title.substring(0,30))}`;
-  const qr=`https://api.qrserver.com/v1/create-qr-code/?size=155x155&data=upi://pay?pa=${UPI_ID}%26pn=GIRIRAJ%20PAREEK%26am=${price}%26cu=INR`;
-  const payNowHtml=mobile
-    ?`<a href="${esc(upiLink)}" id="pay-now-link" style="display:block;text-decoration:none"><button class="pay-now-btn pay-now-mobile" onclick="onMobilePayTap()"><span>📱</span><div><div>Pay Now — ₹${price}</div><div class="pay-now-label">UPI App mein open hoga</div></div></button></a>`
-    :`<div class="ss-section"><span class="ss-label">📸 Payment Screenshot Upload Karo (Optional)</span>
-      <div class="ss-dz" id="ss-dz" onclick="document.getElementById('ss-fi').click()">
-        <input type="file" id="ss-fi" accept="image/*" style="display:none;position:absolute;inset:0;opacity:0;cursor:pointer" onchange="handleSSFile(this)">
-        <div style="font-size:1.5rem;margin-bottom:.3rem">🖼️</div>
-        <div class="ss-dz-txt">Screenshot yahan drop karo ya click karo</div>
-        <div class="ss-dz-sub">JPG, PNG • Max 5MB</div>
-      </div>
-      <div id="ss-preview" style="display:none;padding:.55rem .75rem;background:var(--gn-l);border:1.5px solid #7EC8A0;border-radius:10px;font-size:.78rem;font-weight:600;color:var(--gn);margin-top:.5rem">✅ <span id="ss-fn"></span></div>
-      <div id="ss-progress" style="display:none;margin-top:.5rem"><div class="ss-prog-bar"><div class="ss-prog-fill" id="ss-prog-fill"></div></div></div>
-    </div>`;
+  const title=encodeURIComponent(_selBook.title.substring(0,40));
+  const upiBase=`upi://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent('GIRIRAJ PAREEK')}&am=${price}&cu=INR&tn=${title}`;
+  const qrData=`upi://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent('GIRIRAJ PAREEK')}&am=${price}&cu=INR`;
+  const qr=`https://api.qrserver.com/v1/create-qr-code/?size=175x175&data=${encodeURIComponent(qrData)}`;
+
+  // UPI App buttons for mobile — multiple deep-link formats for reliability
+  const upiApps = mobile ? `
+    <div class="upi-apps-label">इनमें से कोई भी UPI App चुनो:</div>
+    <div class="upi-apps-grid">
+      <a class="upi-app-btn" href="gpay://upi/pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent('GIRIRAJ PAREEK')}&am=${price}&cu=INR&tn=${title}" onclick="onUPIAppTap()" title="Google Pay">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Google_Pay_Logo.svg/512px-Google_Pay_Logo.svg.png" alt="GPay" onerror="this.style.display='none';this.parentElement.querySelector('span').textContent='GPay'"><span>GPay</span>
+      </a>
+      <a class="upi-app-btn" href="phonepe://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent('GIRIRAJ PAREEK')}&am=${price}&cu=INR&tn=${title}" onclick="onUPIAppTap()" title="PhonePe">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/PhonePe_Logo.svg/512px-PhonePe_Logo.svg.png" alt="PhonePe" onerror="this.style.display='none';this.parentElement.querySelector('span').textContent='PhonePe'"><span>PhonePe</span>
+      </a>
+      <a class="upi-app-btn" href="paytmmp://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent('GIRIRAJ PAREEK')}&am=${price}&cu=INR&tn=${title}" onclick="onUPIAppTap()" title="Paytm">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/Paytm_Logo_%28standalone%29.svg/512px-Paytm_Logo_%28standalone%29.svg.png" alt="Paytm" onerror="this.style.display='none';this.parentElement.querySelector('span').textContent='Paytm'"><span>Paytm</span>
+      </a>
+      <a class="upi-app-btn upi-app-any" href="${esc(upiBase)}" onclick="onUPIAppTap()" title="Any UPI App">
+        <span style="font-size:1.3rem">📱</span><span>Any App</span>
+      </a>
+    </div>
+    <div style="display:flex;align-items:center;gap:.5rem;margin:.5rem 0"><div style="flex:1;height:1px;background:var(--cr-d)"></div><span style="font-size:.62rem;color:var(--gy);font-weight:700;letter-spacing:1px;white-space:nowrap">या QR Scan करो</span><div style="flex:1;height:1px;background:var(--cr-d)"></div></div>
+    ` : '';
+
+  // Step guide
+  const stepGuide=`<div class="pay-steps">
+    <div class="pay-step ${mobile?'':'pay-step-done'}"><span class="pay-step-num">${mobile?'1':'✓'}</span><span>UPI App से ₹${price} भेजो → <strong>${UPI_ID}</strong></span></div>
+    <div class="pay-step"><span class="pay-step-num">2</span><span>Payment के बाद UPI app में <strong>Transaction ID / UTR</strong> copy करो</span></div>
+    <div class="pay-step"><span class="pay-step-num">3</span><span>नीचे <strong>Screenshot</strong> upload करो और <strong>UTR</strong> fill करो</span></div>
+  </div>`;
+
+  // Screenshot section — MANDATORY
+  const ssSection=`<div class="ss-section ss-mandatory">
+    <span class="ss-label">📸 Payment Screenshot <span class="ss-required-badge">जरूरी है</span></span>
+    <p class="ss-mandatory-hint">Screenshot upload किए बिना Submit नहीं होगा</p>
+    <div class="ss-dz" id="ss-dz" onclick="document.getElementById('ss-fi').click()">
+      <input type="file" id="ss-fi" accept="image/*" style="display:none;position:absolute;inset:0;opacity:0;cursor:pointer" onchange="handleSSFile(this)">
+      <div style="font-size:1.5rem;margin-bottom:.3rem">🖼️</div>
+      <div class="ss-dz-txt">Screenshot यहाँ drop करो या click करो</div>
+      <div class="ss-dz-sub">JPG, PNG • Max 5MB • Required ✱</div>
+    </div>
+    <div id="ss-preview" style="display:none;padding:.55rem .75rem;background:var(--gn-l);border:1.5px solid #7EC8A0;border-radius:10px;font-size:.78rem;font-weight:600;color:var(--gn);margin-top:.5rem;align-items:center;gap:.5rem">✅ <span id="ss-fn"></span> <button onclick="clearSSFile()" style="background:none;border:none;cursor:pointer;color:var(--rd);font-weight:700;font-size:.8rem;margin-left:auto">✕</button></div>
+    <div id="ss-progress" style="display:none;margin-top:.5rem"><div class="ss-prog-bar"><div class="ss-prog-fill" id="ss-prog-fill"></div></div><div id="ss-prog-txt" style="font-size:.68rem;color:var(--gy);margin-top:.2rem;font-weight:600">Uploading...</div></div>
+  </div>`;
+
   let extraInfoHtml='';
   if(_selBook.isUnitBundle){
     extraInfoHtml=`<div style="background:var(--gn-l);border-radius:10px;padding:.65rem .9rem;margin-bottom:.75rem;text-align:left"><p style="font-size:.72rem;font-weight:700;color:var(--gn);margin-bottom:.2rem">📐 Unit Bundle (${(_selBook.unitBookIds||[]).length} units)</p><p style="font-size:.7rem;color:var(--ink-m)">Saari units ek saath unlock hongi approval ke baad.</p></div>`;
   }
+
   const m=document.getElementById('pay-modal');
   m.style.display='flex'; m.className='mov';
   m.innerHTML=`<div class="mo">
+    <div class="mo-close-btn" onclick="closePay()">✕</div>
     <h3>${_selBook.isCombo?'📦 Combo Payment':_selBook.isUnitBundle?'📐 Bundle Payment':'💳 Secure Payment'}</h3>
     <p class="mo-sub" id="mo-price-sub">₹${price} • "${esc(_selBook.title)}"</p>
     ${extraInfoHtml}
-    ${mobile
-      ?`${payNowHtml}<div style="display:flex;align-items:center;gap:.6rem;margin:.3rem 0 .7rem"><div style="flex:1;height:1px;background:var(--cr-d)"></div><span style="font-size:.65rem;color:var(--gy);font-weight:700;letter-spacing:1px">YA QR SCAN KARO</span><div style="flex:1;height:1px;background:var(--cr-d)"></div></div><div class="qr-box"><img src="${qr}" alt="QR" onerror="this.style.display='none'"></div><div class="upi-l">${UPI_ID}</div>`
-      :`<div class="qr-box"><img src="${qr}" alt="QR" onerror="this.style.display='none'"></div><div class="upi-l">GIRIRAJ PAREEK • IPPB • ${UPI_ID}</div>${payNowHtml}`
-    }
+    ${stepGuide}
+    ${upiApps}
+    <div class="qr-box" id="qr-box-wrap"><img src="${qr}" alt="QR Code" id="qr-img" onerror="this.parentElement.innerHTML='<div style=\\'padding:.5rem;font-size:.72rem;color:var(--gy)\\'>QR load नहीं हुआ — UPI ID use करो</div>'"></div>
+    <div class="upi-l" id="upi-id-display" onclick="copyUPI()" title="Click to copy" style="cursor:pointer">📋 ${UPI_ID} <span style="font-size:.6rem;color:var(--sf);font-weight:700">COPY</span></div>
+    ${ssSection}
     <div class="coup-row"><input class="coup-in" id="coup-i" type="text" maxlength="20" placeholder="COUPON CODE (optional)"><button class="coup-apply" onclick="applyCoupon()">Apply</button></div>
     <div class="coup-status" id="coup-status"></div>
     <div id="price-display" style="margin-bottom:.65rem"></div>
-    <span class="utr-lb">UPI Transaction UTR Number dalo (12 digits)</span>
+    <span class="utr-lb">UPI Transaction UTR Number दालो (12 digits)</span>
     <div class="utr-wrap">
       <input class="utr-in" id="utr-i" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="12" placeholder="000000000000" autocomplete="off" oninput="onUTRInput(this)" onpaste="onUTRPaste(event)">
       <span class="utr-counter" id="utr-counter">0/12</span>
     </div>
     <div class="utr-alert" id="utr-alert">⚠️ <span id="utr-alert-msg">Yeh UTR pehle se use ho chuka hai.</span></div>
-    <p class="utr-hint">📌 Sirf 12 numeric digits — UPI app mein "Transaction ID" ya "UTR" ke naam se milega</p>
+    <p class="utr-hint">📌 UPI app में "Transaction ID" या "UTR Number" 12 digits का होता है</p>
     <div class="m-acts">
       <button class="btn-mc" onclick="closePay()">Cancel</button>
-      <button class="btn-mp" id="pay-btn" onclick="doPay()" disabled>✓ Submit Payment</button>
+      <button class="btn-mp" id="pay-btn" onclick="doPay()" disabled>📸 Screenshot Required</button>
     </div>
-    <div class="mo-tg-line"><span>❓ Koi problem?</span><a href="${TG_HANDLE}" target="_blank" rel="noopener">📱 @PdusuLibraryHelpline</a></div>
+    <div class="mo-tg-line"><span>❓ Help chahiye?</span><a href="${TG_HANDLE}" target="_blank" rel="noopener">📱 @PdusuLibraryHelpline</a></div>
   </div>`;
-  if(!mobile){
-    const dz=document.getElementById('ss-dz');
-    if(dz){
-      dz.addEventListener('dragover',e=>{e.preventDefault();dz.style.borderColor='var(--sf)';});
-      dz.addEventListener('dragleave',()=>{dz.style.borderColor='';});
-      dz.addEventListener('drop',e=>{e.preventDefault();dz.style.borderColor='';const f=e.dataTransfer.files[0];if(f)handleSSFileDirect(f);});
-    }
+
+  // Drag-drop for screenshot
+  const dz=document.getElementById('ss-dz');
+  if(dz){
+    dz.addEventListener('dragover',e=>{e.preventDefault();dz.style.borderColor='var(--sf)';});
+    dz.addEventListener('dragleave',()=>{dz.style.borderColor='';});
+    dz.addEventListener('drop',e=>{e.preventDefault();dz.style.borderColor='';const f=e.dataTransfer.files[0];if(f)handleSSFileDirect(f);});
   }
+}
+
+function copyUPI(){
+  navigator.clipboard?.writeText(UPI_ID).then(()=>toast('UPI ID copied! 📋','ok')).catch(()=>toast(UPI_ID,''));
+}
+
+function onUPIAppTap(){
+  setTimeout(()=>{
+    const utr=document.getElementById('utr-i');
+    if(utr){ utr.focus(); }
+    toast('✅ Payment के बाद UTR नीचे fill करो और Screenshot upload करो','ok');
+  }, 2000);
 }
 
 // ═══════════════════════════════════════════
@@ -585,7 +657,16 @@ function onUTRPaste(e){
 function updatePayBtn(){
   const b=document.getElementById('pay-btn');
   if(!b) return;
-  b.disabled=((document.getElementById('utr-i')?.value||'').length!==12);
+  const utrOk=((document.getElementById('utr-i')?.value||'').length===12);
+  const ssOk=!!_screenshotFile;
+  b.disabled=!(utrOk && ssOk);
+  if(!ssOk){
+    b.textContent='📸 Screenshot Upload Karo';
+  } else if(!utrOk){
+    b.textContent='✏️ UTR Number Dalo';
+  } else {
+    b.textContent='✓ Submit Payment';
+  }
 }
 function showUTRAlert(msg){
   const al=document.getElementById('utr-alert');
@@ -601,9 +682,6 @@ function hideUTRAlert(){
   const inp=document.getElementById('utr-i');
   if(inp) inp.classList.remove('invalid-utr');
 }
-function onMobilePayTap(){
-  setTimeout(()=>{ const u=document.getElementById('utr-i'); if(u){ u.focus(); toast('UPI app mein payment karo → wapas aao → UTR dalo 👆','ok'); } },1500);
-}
 function handleSSFile(inp){ if(inp.files?.[0]) handleSSFileDirect(inp.files[0]); }
 function handleSSFileDirect(f){
   if(!f.type.startsWith('image/')) return toast('Sirf image files allowed!','err');
@@ -611,29 +689,53 @@ function handleSSFileDirect(f){
   _screenshotFile=f;
   const prev=document.getElementById('ss-preview');
   const fn=document.getElementById('ss-fn');
-  if(prev) prev.style.display='flex';
+  const dz=document.getElementById('ss-dz');
+  if(prev){ prev.style.display='flex'; }
   if(fn) fn.textContent=f.name+' ('+(f.size/1024).toFixed(0)+' KB)';
+  if(dz) dz.style.borderColor='var(--gn)';
+  updatePayBtn();
+  toast('📸 Screenshot select ho gaya!','ok');
+}
+function clearSSFile(){
+  _screenshotFile=null; _screenshotUrl=null;
+  const prev=document.getElementById('ss-preview');
+  const fi=document.getElementById('ss-fi');
+  const dz=document.getElementById('ss-dz');
+  if(prev) prev.style.display='none';
+  if(fi) fi.value='';
+  if(dz) dz.style.borderColor='';
+  updatePayBtn();
 }
 function closePay(){ document.getElementById('pay-modal').style.display='none'; _screenshotFile=null; _screenshotUrl=null; }
 
 async function doPay(){
   const utr=(document.getElementById('utr-i')?.value||'').trim();
   if(!/^\d{12}$/.test(utr)){ showUTRAlert('UTR exactly 12 numeric digits hona chahiye.'); document.getElementById('utr-i')?.focus(); return; }
+  if(!_screenshotFile){ toast('📸 Payment screenshot upload karna zaroori hai!','err'); document.getElementById('ss-dz')?.classList.add('shake'); setTimeout(()=>document.getElementById('ss-dz')?.classList.remove('shake'),500); return; }
   const b=document.getElementById('pay-btn');
   b.disabled=true; b.textContent='Check ho raha hai...'; hideUTRAlert();
   try{
     const utrUsed=await window.checkUTRExists(utr);
     if(utrUsed){ showUTRAlert('Yeh UTR number pehle se use ho chuka hai. Apna sahi UTR dalo.'); document.getElementById('utr-i').classList.add('invalid-utr'); b.disabled=false; b.textContent='✓ Submit Payment'; return; }
+    // Upload screenshot to Supabase
     let screenshotUrl=null;
-    if(_screenshotFile&&window.uploadScreenshot){
-      try{
-        const fill=document.getElementById('ss-prog-fill');
-        const prog=document.getElementById('ss-progress');
-        if(prog) prog.style.display='block';
-        b.textContent='Screenshot upload ho rahi hai...';
-        screenshotUrl=await window.uploadScreenshot(_screenshotFile,p=>{if(fill)fill.style.width=p+'%';});
-        _screenshotUrl=screenshotUrl;
-      }catch(ssErr){ console.warn('Screenshot upload failed:',ssErr); }
+    try{
+      const fill=document.getElementById('ss-prog-fill');
+      const prog=document.getElementById('ss-progress');
+      const progTxt=document.getElementById('ss-prog-txt');
+      if(prog) prog.style.display='block';
+      b.textContent='📸 Screenshot upload ho rahi hai...';
+      screenshotUrl=await uploadScreenshotSupabase(_screenshotFile,p=>{
+        if(fill) fill.style.width=p+'%';
+        if(progTxt) progTxt.textContent=`Uploading... ${p}%`;
+      });
+      _screenshotUrl=screenshotUrl;
+      if(prog) prog.style.display='none';
+    }catch(ssErr){
+      b.disabled=false; b.textContent='✓ Submit Payment';
+      toast('❌ Screenshot upload fail! Check internet aur retry karo.','err');
+      console.error('Supabase upload error:',ssErr);
+      return;
     }
     b.textContent='Saving...';
     const payAmt=(_finalPrice>0?_finalPrice:Number(_selBook.price));
@@ -667,12 +769,16 @@ async function applyCoupon(){
       <div class="disc-line"><span style="font-size:.72rem;color:var(--gy)">Original</span><span class="disc-orig">₹${orig}</span></div>
       <div class="disc-line"><span style="font-size:.72rem;color:var(--gy)">Discount</span><span class="disc-save">- ₹${disc}</span></div>
       <div class="disc-line" style="margin-top:.3rem;padding-top:.4rem;border-top:1px dashed var(--cr-d)"><span style="font-size:.78rem;font-weight:700;color:var(--ink)">Final</span><span class="disc-final">₹${_finalPrice}</span></div>`;
-    const qrImg=document.querySelector('.qr-box img');
-    if(qrImg) qrImg.src=`https://api.qrserver.com/v1/create-qr-code/?size=155x155&data=upi://pay?pa=${UPI_ID}%26pn=GIRIRAJ%20PAREEK%26am=${_finalPrice}%26cu=INR`;
+    const qrImg=document.getElementById('qr-img');
+    if(qrImg){ const qrData=`upi://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent('GIRIRAJ PAREEK')}&am=${_finalPrice}&cu=INR`; qrImg.src=`https://api.qrserver.com/v1/create-qr-code/?size=175x175&data=${encodeURIComponent(qrData)}`; }
+    const upiDisp=document.getElementById('upi-id-display');
     const sub=document.getElementById('mo-price-sub');
     if(sub) sub.textContent=`₹${_finalPrice} (discount ke baad)`;
-    const payLink=document.getElementById('pay-now-link');
-    if(payLink) payLink.href=`upi://pay?pa=${encodeURIComponent(UPI_ID)}&pn=GIRIRAJ%20PAREEK&am=${_finalPrice}&cu=INR`;
+    // Update all UPI app links with new price
+    document.querySelectorAll('.upi-app-btn').forEach(a=>{
+      const href=a.getAttribute('href');
+      if(href) a.setAttribute('href',href.replace(/am=\d+(\.\d+)?/,`am=${_finalPrice}`));
+    });
   }catch(e){ st.className='coup-status err'; st.textContent='⚠️ Check nahi ho saka. Internet check karo.'; }
 }
 
@@ -794,6 +900,7 @@ function renderAdmin(){
 async function loadPayments(){
   const lst=document.getElementById('pay-list');
   lst.innerHTML='<p style="color:var(--gy);padding:1rem">Load ho raha hai...</p>';
+  loadAdminStats();
   try{
     const pays=await window.loadPending();
     if(!pays.length){ lst.innerHTML=`<div class="empty"><div class="em">✅</div><p>Koi pending payment nahi!</p></div>`; return; }
@@ -802,7 +909,12 @@ async function loadPayments(){
         <div class="pc-em">${esc(p.userEmail)}</div>
         <div class="pc-bk">${p.isCombo?'📦 ':p.isUnitBundle?'📐 ':''}${esc(p.bookTitle)}</div>
         <div class="pc-ut">UTR: ${esc(p.utrNumber)} • ₹${p.amount}</div>
-        ${p.screenshotUrl?`<div class="pc-ss">📸 <a href="${esc(p.screenshotUrl)}" target="_blank" rel="noopener">Screenshot Dekho →</a></div>`:''}
+        ${p.screenshotUrl?`<div class="pc-ss">
+          <a href="${esc(p.screenshotUrl)}" target="_blank" rel="noopener" title="Screenshot देखो">
+            <img src="${esc(p.screenshotUrl)}" alt="Payment Screenshot" class="pc-ss-thumb" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">
+            <span style="display:none;font-size:.72rem;color:var(--gn);font-weight:700">📸 Screenshot खोलो →</span>
+          </a>
+        </div>`:`<div style="font-size:.68rem;color:var(--rd);font-weight:700;margin-top:.3rem">⚠️ No screenshot</div>`}
       </div>
       <div class="pc-actions">
         <button class="btn-apr" data-id="${p.id}" data-combo="${!!p.isCombo||!!p.isUnitBundle}" onclick="doApprove(this)">✓ Approve</button>
@@ -810,6 +922,24 @@ async function loadPayments(){
       </div>
     </div>`).join('');
   }catch(e){ lst.innerHTML='<p style="color:red;padding:1rem">Error! Refresh karo.</p>'; }
+}
+
+async function loadAdminStats(){
+  try{
+    const all=await window.loadAllPurchases();
+    const approved=all.filter(p=>p.status==='approved'&&Number(p.amount)>0);
+    const pending=all.filter(p=>p.status==='pending');
+    const totalEarnings=approved.reduce((s,p)=>s+Number(p.amount||0),0);
+    const books=window._books||[];
+    const se=document.getElementById('stat-earn');
+    const sa=document.getElementById('stat-approved');
+    const sp=document.getElementById('stat-pending');
+    const sb=document.getElementById('stat-books');
+    if(se) se.textContent='₹'+totalEarnings.toLocaleString('en-IN');
+    if(sa) sa.textContent=approved.length;
+    if(sp) sp.textContent=pending.length;
+    if(sb) sb.textContent=books.length;
+  }catch(e){ console.warn('loadAdminStats:',e); }
 }
 
 async function doApprove(btn){
