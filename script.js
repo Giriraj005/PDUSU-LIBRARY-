@@ -176,8 +176,13 @@ async function doLogout(){ await window.logoutUser(); nav('home'); toast('Logout
 // ═══════════════════════════════════════════
 function getSt(bid){
   const purch=window._purchases||[];
-  const direct=purch.find(p=>p.bookId===bid);
-  if(direct) return direct.status;
+  // Sabhi matching records dhundho — priority: approved > pending > rejected
+  const directs=purch.filter(p=>p.bookId===bid);
+  if(directs.length){
+    if(directs.some(p=>p.status==='approved')) return 'approved';
+    if(directs.some(p=>p.status==='pending'))  return 'pending';
+    if(directs.some(p=>p.status==='rejected')) return 'rejected';
+  }
   const bk=(window._books||[]).find(b=>b.id===bid);
   if(bk){
     if(purch.find(p=>p.isCombo&&p.stream===bk.stream&&p.semester===bk.semester&&p.status==='approved')) return 'approved';
