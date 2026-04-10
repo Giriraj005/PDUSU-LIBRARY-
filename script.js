@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════
 const ADMIN_PASS = 'pdsu@admin2024';
 const UPI_ID     = '7727867614@postbank';
-const TG_HANDLE  = 'https://t.me/PdusuLibraryHelpline';
+const TG_HANDLE  = 'https://t.me/APNILIBRARYHELPLINE';
 const DISMISSED_KEY = 'pdsu_dismissed_rejections';
 
 // ── Supabase (screenshot uploads only) ──────────────────────────────────────
@@ -49,6 +49,10 @@ const PG_STREAMS = [
   {id:'MBA',  name:'MBA',   emoji:'🏢', full:'Master of Business Admin'},
 ];
 const SEMS = ['Semester 1','Semester 2','Semester 3','Semester 4','Semester 5','Semester 6'];
+const MEDIUMS = [
+  {id:'Hindi',  label:'हिंदी माध्यम', emoji:'🇮🇳', cls:'hindi-medium'},
+  {id:'English',label:'English Medium', emoji:'🇬🇧', cls:'english-medium'},
+];
 const UNIT_LABELS = {1:'Unit 1',2:'Unit 2',3:'Unit 3',4:'Unit 4','All':'All Units','all':'All Units'};
 const UNIT_BADGE_CLASS = {1:'u1',2:'u2',3:'u3',4:'u4','All':'uA','all':'uA'};
 const GRADIENTS = ['#7B1D1D,#B84E00','#1A4A7A,#2E7AC8','#1A7A40,#2EAA60','#5A0F7A,#8E2EC8','#7A5A0F,#C89A2E'];
@@ -58,6 +62,7 @@ const EMOJIS    = ['📘','📗','📙','📕','📓'];
 let _cat='UG';
 let _ss=null;
 let _sem=null;
+let _medium=null;
 let _selSubject=null;
 let _admUnlocked=false;
 let _pdfFile=null;
@@ -192,8 +197,14 @@ function getSt(bid){
   }
   return null;
 }
-function isComboOwned(stream,sem){ return (window._purchases||[]).some(p=>p.bookId==='COMBO_'+stream+'_'+sem&&p.status==='approved'); }
-function isComboPending(stream,sem){ return (window._purchases||[]).some(p=>p.bookId==='COMBO_'+stream+'_'+sem&&p.status==='pending'); }
+function isComboOwned(stream,sem){ 
+  const mid=_medium||'Hindi';
+  return (window._purchases||[]).some(p=>(p.bookId==='COMBO_'+stream+'_'+sem+'_'+mid||p.bookId==='COMBO_'+stream+'_'+sem)&&p.status==='approved'); 
+}
+function isComboPending(stream,sem){ 
+  const mid=_medium||'Hindi';
+  return (window._purchases||[]).some(p=>(p.bookId==='COMBO_'+stream+'_'+sem+'_'+mid||p.bookId==='COMBO_'+stream+'_'+sem)&&p.status==='pending'); 
+}
 
 // ═══════════════════════════════════════════
 //  LIBRARY
@@ -204,6 +215,7 @@ function renderLib(){
   else if(_cat==='OTHER') renderOther();
   else if(!_ss)           showStreams();
   else if(!_sem)          showSems();
+  else if(!_medium)       showMediums();
   else if(!_selSubject)   showSubjects();
   else                    showUnitPanel();
 }
@@ -219,10 +231,10 @@ function renderCatTabs(){
   ].map(c=>`<button class="cat-pill ${c.cls} ${_cat===c.id?'active':''}" onclick="selCat('${c.id}')">${c.label}</button>`).join('');
 }
 
-function selCat(id){ _cat=id; _ss=null; _sem=null; _selSubject=null; hideAllPanels(); renderLib(); }
+function selCat(id){ _cat=id; _ss=null; _sem=null; _medium=null; _selSubject=null; hideAllPanels(); renderLib(); }
 
 function hideAllPanels(){
-  ['pan-stream','pan-sem','pan-subjects','pan-units','pan-books','pan-yt','pan-other'].forEach(id=>{
+  ['pan-stream','pan-sem','pan-medium','pan-subjects','pan-units','pan-books','pan-yt','pan-other'].forEach(id=>{
     const el=document.getElementById(id);
     if(el){ el.style.display='none'; el.innerHTML=''; }
   });
@@ -238,7 +250,11 @@ function renderBC(){
       const s=streams.find(x=>x.id===_ss);
       h+=`<span class="bcs">›</span><span class="bci ${!_sem?'act':''}" onclick="goStream()">${s?s.emoji:''} ${s?s.name:_ss}</span>`;
     }
-    if(_sem) h+=`<span class="bcs">›</span><span class="bci ${!_selSubject?'act':''}" onclick="goSem()">${_sem}</span>`;
+    if(_sem) h+=`<span class="bcs">›</span><span class="bci ${!_medium?'act':''}" onclick="goSem()">${_sem}</span>`;
+    if(_medium){
+      const med=MEDIUMS.find(m=>m.id===_medium);
+      h+=`<span class="bcs">›</span><span class="bci ${!_selSubject?'act':''}" onclick="goMedium()">${med?med.emoji:''} ${med?med.label:_medium}</span>`;
+    }
     if(_selSubject) h+=`<span class="bcs">›</span><span class="bci act">${esc(_selSubject)}</span>`;
   } else if(_cat==='OTHER'){
     h+=`<span class="bcs">›</span><span class="bci act">Other Exams</span>`;
@@ -248,9 +264,10 @@ function renderBC(){
   bc.innerHTML=h;
 }
 
-function goHome(){ _ss=null; _sem=null; _selSubject=null; _cat='UG'; hideAllPanels(); renderLib(); }
-function goStream(){ _sem=null; _selSubject=null; hideAllPanels(); renderLib(); }
-function goSem(){ _selSubject=null; hideAllPanels(); renderLib(); }
+function goHome(){ _ss=null; _sem=null; _medium=null; _selSubject=null; _cat='UG'; hideAllPanels(); renderLib(); }
+function goStream(){ _sem=null; _medium=null; _selSubject=null; hideAllPanels(); renderLib(); }
+function goSem(){ _medium=null; _selSubject=null; hideAllPanels(); renderLib(); }
+function goMedium(){ _selSubject=null; hideAllPanels(); renderLib(); }
 
 function showStreams(){
   const streams=_cat==='PG'?PG_STREAMS:UG_STREAMS;
@@ -267,7 +284,7 @@ function showStreams(){
     </div>`;
   }).join('')}</div>`;
 }
-function selStream(id){ _ss=id; _sem=null; _selSubject=null; hideAllPanels(); renderLib(); }
+function selStream(id){ _ss=id; _sem=null; _medium=null; _selSubject=null; hideAllPanels(); renderLib(); }
 
 function showSems(){
   const streams=_cat==='PG'?PG_STREAMS:UG_STREAMS;
@@ -285,14 +302,41 @@ function showSems(){
       </button>`;
     }).join('')}</div>`;
 }
-function selSem(sem){ _sem=sem; _selSubject=null; hideAllPanels(); renderLib(); }
+function selSem(sem){ _sem=sem; _medium=null; _selSubject=null; hideAllPanels(); renderLib(); }
+
+function showMediums(){
+  const streams=_cat==='PG'?PG_STREAMS:UG_STREAMS;
+  const s=streams.find(x=>x.id===_ss);
+  setHd(`${s?s.emoji:''} ${s?s.name:_ss} — ${_sem}`,`Medium choose karo`);
+  hideAllPanels();
+  const panMed=document.getElementById('pan-medium');
+  if(!panMed){ console.error('pan-medium not found'); return; }
+  panMed.style.display='block';
+  const bks=window._books||[];
+  panMed.innerHTML=`
+    <p style="color:var(--gy);font-size:.84rem;margin-bottom:1.25rem;font-weight:500">Kaunse medium ki PDF chahiye?</p>
+    <div class="medium-grid">
+      ${MEDIUMS.map(med=>{
+        const cnt=bks.filter(b=>b.stream===_ss&&b.semester===_sem&&b.medium===med.id).length;
+        const has=cnt>0;
+        return `<div class="medium-card ${med.cls} ${has?'active-medium':'empty-medium'}" onclick="${has?`selMedium('${med.id}')`:''}" style="${has?'cursor:pointer':'opacity:.55;cursor:not-allowed'}">
+          <div class="medium-emoji">${med.emoji}</div>
+          <div class="medium-name">${med.label}</div>
+          <div class="medium-count">${has?cnt+' materials':'Abhi nahi hai'}</div>
+          ${has?`<div class="medium-arrow">Browse karo →</div>`:`<div class="medium-soon">Coming Soon</div>`}
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+function selMedium(med){ _medium=med; _selSubject=null; hideAllPanels(); renderLib(); }
 
 function showSubjects(){
   const streams=_cat==='PG'?PG_STREAMS:UG_STREAMS;
   const s=streams.find(x=>x.id===_ss);
-  setHd(`${s?s.emoji:''} ${s?s.name:_ss} — ${_sem}`,`Subject choose karo`);
+  const med=MEDIUMS.find(m=>m.id===_medium);
+  setHd(`${s?s.emoji:''} ${s?s.name:_ss} — ${_sem} — ${med?med.emoji:''} ${med?med.label:_medium}`,`Subject choose karo`);
   hideAllPanels();
-  const bks=(window._books||[]).filter(b=>b.stream===_ss&&b.semester===_sem);
+  const bks=(window._books||[]).filter(b=>b.stream===_ss&&b.semester===_sem&&b.medium===_medium);
   const combo=(window._combos||[]).find(c=>c.stream===_ss&&c.semester===_sem&&c.active!==false);
   const comboOwned=isComboOwned(_ss,_sem);
   const comboPending=isComboPending(_ss,_sem);
@@ -353,7 +397,7 @@ function openSubject(name){ _selSubject=name; hideAllPanels(); renderLib(); }
 function showUnitPanel(){
   setHd(`📐 ${esc(_selSubject)}`,`Units aur class videos`);
   hideAllPanels();
-  const allBooks=(window._books||[]).filter(b=>b.stream===_ss&&b.semester===_sem&&(b.subject||b.title)===_selSubject);
+  const allBooks=(window._books||[]).filter(b=>b.stream===_ss&&b.semester===_sem&&b.medium===_medium&&(b.subject||b.title)===_selSubject);
   allBooks.sort((a,b)=>({1:1,2:2,3:3,4:4,'All':5,'all':5}[a.unitNumber]||99)-({1:1,2:2,3:3,4:4,'All':5,'all':5}[b.unitNumber]||99));
   const unitBooks=allBooks.filter(b=>b.unitNumber&&String(b.unitNumber)!=='All'&&String(b.unitNumber)!=='all');
   const bundleIndivTotal=unitBooks.filter(b=>Number(b.price)>0).reduce((a,b)=>a+Number(b.price||0),0);
@@ -421,7 +465,7 @@ function showUnitPanel(){
 
 function buyUnitBundle(){
   if(!window._cur) return nav('login');
-  const unitBooks=(window._books||[]).filter(b=>b.stream===_ss&&b.semester===_sem&&(b.subject||b.title)===_selSubject&&b.unitNumber&&String(b.unitNumber)!=='All'&&String(b.unitNumber)!=='all');
+  const unitBooks=(window._books||[]).filter(b=>b.stream===_ss&&b.semester===_sem&&b.medium===_medium&&(b.subject||b.title)===_selSubject&&b.unitNumber&&String(b.unitNumber)!=='All'&&String(b.unitNumber)!=='all');
   const total=unitBooks.filter(b=>Number(b.price)>0).reduce((a,b)=>a+Number(b.price||0),0);
   const bundlePrice=Math.max(total-5,unitBooks.length*5);
   _selBook={id:'BUNDLE_'+_ss+'_'+_sem+'_'+_selSubject.replace(/\s/g,'_'),title:`${_selSubject} — All Units Bundle`,price:bundlePrice,isUnitBundle:true,stream:_ss,semester:_sem,subject:_selSubject,unitBookIds:unitBooks.map(b=>b.id)};
@@ -527,10 +571,11 @@ function openComboPay(stream,sem){
   if(!window._cur) return nav('login');
   const combo=(window._combos||[]).find(c=>c.stream===stream&&c.semester===sem&&c.active!==false);
   if(!combo) return toast('Combo available nahi hai','err');
-  const bks=(window._books||[]).filter(b=>b.stream===stream&&b.semester===sem);
+  const bks=(window._books||[]).filter(b=>b.stream===stream&&b.semester===sem&&b.medium===_medium);
   const streams=_cat==='PG'?PG_STREAMS:UG_STREAMS;
   const s=streams.find(x=>x.id===stream);
-  _selBook={id:'COMBO_'+stream+'_'+sem,title:`${s?s.name:stream} ${sem} — Complete Bundle`,price:combo.price,isCombo:true,stream,semester:sem,bookIds:bks.map(b=>b.id)};
+  const medLabel=_medium==='Hindi'?'🇮🇳 हिंदी':'🇬🇧 English';
+  _selBook={id:'COMBO_'+stream+'_'+sem+'_'+(_medium||'Hindi'),title:`${s?s.name:stream} ${sem} ${medLabel} — Complete Bundle`,price:combo.price,isCombo:true,stream,semester:sem,medium:_medium,bookIds:bks.map(b=>b.id)};
   _appliedCoupon=null; _finalPrice=Number(combo.price); _screenshotFile=null; _screenshotUrl=null;
   showPayModal();
 }
@@ -615,7 +660,7 @@ function showPayModal(){
       <button class="btn-mc" onclick="closePay()">Cancel</button>
       <button class="btn-mp" id="pay-btn" onclick="doPay()" disabled>📸 Screenshot Required</button>
     </div>
-    <div class="mo-tg-line"><span>❓ Help chahiye?</span><a href="${TG_HANDLE}" target="_blank" rel="noopener">📱 @PdusuLibraryHelpline</a></div>
+    <div class="mo-tg-line"><span>❓ Help chahiye?</span><a href="${TG_HANDLE}" target="_blank" rel="noopener">📱 @APNILIBRARYHELPLINE</a></div>
   </div>`;
 
   // Drag-drop for screenshot
@@ -813,7 +858,7 @@ function renderMyBooks(){
           <div class="rej-notice-icon">❌</div>
           <div class="rej-notice-text">
             <div class="rej-notice-tt">Payment Rejected — "${esc(p.bookTitle)}"</div>
-            <div class="rej-notice-sub">UTR <strong>${esc(p.utrNumber)}</strong> verify nahi hua. Sahi UTR use karke dobara payment karo. Help: <a href="${TG_HANDLE}" target="_blank" style="color:var(--rd);font-weight:700">@PdusuLibraryHelpline</a></div>
+            <div class="rej-notice-sub">UTR <strong>${esc(p.utrNumber)}</strong> verify nahi hua. Sahi UTR use karke dobara payment karo. Help: <a href="${TG_HANDLE}" target="_blank" style="color:var(--rd);font-weight:700">@APNILIBRARYHELPLINE</a></div>
           </div>
           <button class="rej-dismiss-btn" onclick="dismissNotice('${p.id}')">✕ Dismiss</button>
         </div>
@@ -975,8 +1020,18 @@ function swAT(t){
 
 function onCatChange(){
   const cat=document.getElementById('bk-cat').value;
-  document.getElementById('fg-stream').style.display=(cat==='OTHER'||cat==='YT')?'none':'block';
-  document.getElementById('fg-sem-row').style.display=(cat==='OTHER'||cat==='YT')?'none':'grid';
+  const isUGPG=(cat==='UG'||cat==='PG');
+  document.getElementById('fg-stream').style.display=isUGPG?'block':'none';
+  document.getElementById('fg-sem-row').style.display=isUGPG?'grid':'none';
+  const medRow=document.getElementById('fg-medium-row');
+  if(medRow) medRow.style.display=isUGPG?'block':'none';
+}
+function onMediumChange(){
+  const val=document.querySelector('input[name="medium"]:checked')?.value;
+  const hl=document.getElementById('med-hindi-lbl');
+  const el=document.getElementById('med-english-lbl');
+  if(hl) hl.style.borderColor=val==='Hindi'?'var(--sf)':'var(--cr-d)';
+  if(el) el.style.borderColor=val==='English'?'#1A4A7A':'var(--cr-d)';
 }
 function togCT(val){ ['pdf','drive','html','none'].forEach(k=>{ document.getElementById('ct-'+k).style.display=val===k?'block':'none'; }); }
 function hFS(inp){ if(inp.files?.[0]) setPDF(inp.files[0]); }
@@ -993,10 +1048,12 @@ async function doUpload(){
   const tt=v('bk-tt'),cat=v('bk-cat'),st=v('bk-st'),sm=v('bk-sm'),su=v('bk-su'),pr=v('bk-pr'),ca=v('bk-ca'),unit=document.getElementById('bk-unit')?.value;
   const ct=document.querySelector('input[name="ct"]:checked').value;
   const ytUrl=v('bk-yt');
+  const medium=document.querySelector('input[name="medium"]:checked')?.value||'Hindi';
   if(!tt) return toast('Title required','err');
   if(!cat) return toast('Category choose karo','err');
   if(ct!=='none'&&!pr) return toast('Price dalo','err');
   if((cat==='UG'||cat==='PG')&&!st) return toast('Stream choose karo','err');
+  if((cat==='UG'||cat==='PG')&&!sm) return toast('Semester choose karo','err');
   const btn=document.getElementById('up-btn');
   btn.disabled=1; btn.textContent='⏳ Upload ho rahi hai...';
   let content='',driveUrl='';
@@ -1008,7 +1065,7 @@ async function doUpload(){
       document.getElementById('up-prog').style.display='none';
     } else if(ct==='drive'){ driveUrl=v('bk-drive'); if(!driveUrl){ toast('Drive URL dalo','err'); btn.disabled=0; return; } content=driveUrl; }
     else if(ct==='html'){ content=v('bk-co'); if(!content){ toast('Content dalo','err'); btn.disabled=0; return; } }
-    await window.uploadBook({title:tt,category:cat,stream:st||null,semester:sm||null,subject:su||null,unitNumber:unit||'All',price:Number(pr||0),contentCategory:ca,content,contentType:ct,driveUrl:driveUrl||null,youtubeUrl:ytUrl||null,createdAt:new Date()});
+    await window.uploadBook({title:tt,category:cat,stream:st||null,semester:sm||null,subject:su||null,unitNumber:unit||'All',price:Number(pr||0),contentCategory:ca,content,contentType:ct,driveUrl:driveUrl||null,youtubeUrl:ytUrl||null,medium:(cat==='UG'||cat==='PG')?medium:null,createdAt:new Date()});
     toast('✅ Upload ho gaya!','ok');
     ['bk-tt','bk-su','bk-pr','bk-co','bk-drive','bk-yt'].forEach(id=>{ const el=document.getElementById(id);if(el)el.value=''; });
     document.getElementById('bk-cat').value=''; document.getElementById('bk-st').value=''; document.getElementById('bk-sm').value=''; document.getElementById('bk-unit').value='All'; document.getElementById('pdf-sel').style.display='none'; _pdfFile=null;
@@ -1025,7 +1082,7 @@ function renderEditList(){
   if(catF) bks=bks.filter(b=>b.category===catF||(catF==='UG'&&!b.category));
   if(!bks.length){ lst.innerHTML='<div class="empty"><div class="em">🔍</div><p>Koi book nahi mili.</p></div>'; return; }
   const allStreams=[...UG_STREAMS,...PG_STREAMS];
-  lst.innerHTML=bks.map(bk=>{ const s=allStreams.find(x=>x.id===bk.stream); return `<div class="pc" style="flex-wrap:wrap"><div style="flex:1;min-width:200px"><div class="pc-em">${esc(bk.category||'UG')}${s?' • '+s.name:''}${bk.semester?' • '+esc(bk.semester):''}</div><div class="pc-bk">${esc(bk.title)}</div><div style="font-size:.7rem;color:var(--gy);margin-top:.2rem">Unit: ${bk.unitNumber||'All'} • ₹${bk.price} • ${bk.contentType||'pdf'}${bk.youtubeUrl?` • <span style="color:var(--yt)">▶ YT</span>`:''}</div></div><div style="display:flex;gap:.5rem;flex-shrink:0;align-items:center"><button class="btn-apr" style="background:var(--bl)" data-id="${bk.id}" onclick="openEditModal(this.dataset.id)">✏️ Edit</button></div></div>`; }).join('');
+  lst.innerHTML=bks.map(bk=>{ const s=allStreams.find(x=>x.id===bk.stream); const medLabel=bk.medium?`<span class="pc-medium ${bk.medium==='Hindi'?'hindi':'english'}">${bk.medium==='Hindi'?'🇮🇳 हिंदी':'🇬🇧 English'}</span>`:''; return `<div class="pc" style="flex-wrap:wrap"><div style="flex:1;min-width:200px"><div class="pc-em">${esc(bk.category||'UG')}${s?' • '+s.name:''}${bk.semester?' • '+esc(bk.semester):''} ${medLabel}</div><div class="pc-bk">${esc(bk.title)}</div><div style="font-size:.7rem;color:var(--gy);margin-top:.2rem">Unit: ${bk.unitNumber||'All'} • ₹${bk.price} • ${bk.contentType||'pdf'}${bk.youtubeUrl?` • <span style="color:var(--yt)">▶ YT</span>`:''}</div></div><div style="display:flex;gap:.5rem;flex-shrink:0;align-items:center"><button class="btn-apr" style="background:var(--bl)" data-id="${bk.id}" onclick="openEditModal(this.dataset.id)">✏️ Edit</button></div></div>`; }).join('');
 }
 
 function openEditModal(bid){
@@ -1041,6 +1098,13 @@ function openEditModal(bid){
       <div class="fg"><label>Unit Number</label><select id="em-unit"><option value="All" ${bk.unitNumber==='All'?'selected':''}>All Units</option><option value="1" ${String(bk.unitNumber)==='1'?'selected':''}>Unit 1</option><option value="2" ${String(bk.unitNumber)==='2'?'selected':''}>Unit 2</option><option value="3" ${String(bk.unitNumber)==='3'?'selected':''}>Unit 3</option><option value="4" ${String(bk.unitNumber)==='4'?'selected':''}>Unit 4</option></select></div>
     </div>
     <div class="fg"><label>Subject</label><input type="text" id="em-su" value="${esc(bk.subject||'')}"></div>
+    ${(bk.category==='UG'||bk.category==='PG'||!bk.category)?`
+    <div class="fg"><label>Medium</label>
+      <div style="display:flex;gap:.75rem;margin-top:.4rem">
+        <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem;font-weight:700"><input type="radio" name="em-medium" value="Hindi" ${(bk.medium||'Hindi')==='Hindi'?'checked':''}> 🇮🇳 हिंदी माध्यम</label>
+        <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem;font-weight:700"><input type="radio" name="em-medium" value="English" ${bk.medium==='English'?'checked':''}> 🇬🇧 English Medium</label>
+      </div>
+    </div>`:''}
     <div class="fg"><label>Google Drive / PDF URL</label><input type="url" id="em-drive" value="${esc(bk.driveUrl||bk.content||'')}" placeholder="https://drive.google.com/..."></div>
     <div class="fg" style="border:2px solid #FFCCCC;border-radius:10px;padding:.75rem;background:#FFF8F8">
       <label style="color:#CC0000">▶ YouTube Link <span style="font-weight:400;font-size:.65rem;letter-spacing:0;text-transform:none;color:var(--gy)">(Free, public)</span></label>
@@ -1061,9 +1125,11 @@ async function saveEditBook(bid){
   const su=(document.getElementById('em-su')?.value||'').trim();
   const drive=(document.getElementById('em-drive')?.value||'').trim();
   const yt=(document.getElementById('em-yt')?.value||'').trim();
+  const medium=document.querySelector('input[name="em-medium"]:checked')?.value||null;
   if(!tt) return toast('Title required','err');
   try{
     const updates={title:tt,price:pr,unitNumber:unit,subject:su||null,youtubeUrl:yt||null};
+    if(medium) updates.medium=medium;
     if(drive){ updates.driveUrl=drive; updates.contentType='drive'; updates.content=drive; }
     await window.updateBook(bid,updates); closeEditModal(); toast('✅ Book update ho gaya!','ok'); renderEditList();
   }catch(e){ toast('Error: '+(e?.message||''),'err'); }
