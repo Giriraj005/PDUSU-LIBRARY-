@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PDSU Digital Library — Shekhawati University</title>
+<title>अपनी LIBRARY — Shekhawati University</title>
 <link rel="stylesheet" href="style.css">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 
@@ -125,7 +125,7 @@
 <body>
 
 <div id="ls">
-  <div class="ll">📚 PDSU Library</div>
+  <div class="ll">📚 अपनी Library</div>
   <div class="lb"></div>
   <p style="color:rgba(255,255,255,.4);font-size:.68rem;margin-top:1rem;letter-spacing:2px;font-family:'DM Sans',sans-serif">LOADING...</p>
 </div>
@@ -133,7 +133,7 @@
 <header>
   <div class="hi">
     <div class="logo" onclick="nav('home')">
-      <div class="logo-n">PDSU LIBRARY</div>
+      <div class="logo-n">अपनी LIBRARY</div>
       <div class="logo-s">Shekhawati University</div>
     </div>
     <nav id="hn"></nav>
@@ -158,9 +158,9 @@
     <div class="tg-banner">
       <span>💬</span>
       <span style="font-size:.8rem;color:var(--ink-m)">Koi help chahiye?</span>
-      <a href="https://t.me/PdusuLibraryHelpline" target="_blank" rel="noopener">
+      <a href="https://t.me/APNILIBRARYHELPLINE" target="_blank" rel="noopener">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="#2AABEE" style="flex-shrink:0"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.833.94z"/></svg>
-        @PdusuLibraryHelpline
+        @APNILIBRARYHELPLINE
       </a>
     </div>
   </div>
@@ -188,7 +188,7 @@
 <!-- REGISTER -->
 <div class="view" id="view-register">
   <div class="aw">
-    <h2>Join PDSU Library</h2>
+    <h2>Join अपनी LIBRARY</h2>
     <p>Apna free student account banao abhi</p>
     <div class="fg"><label>Pura Naam</label><input type="text" id="rg-n" placeholder="Ramesh Kumar"></div>
     <div class="fg"><label>Email</label><input type="email" id="rg-e" placeholder="ramesh@gmail.com"></div>
@@ -208,6 +208,7 @@
   <div class="cat-tabs" id="cat-tabs" style="display:none"></div>
   <div id="pan-stream"></div>
   <div id="pan-sem" style="display:none"></div>
+  <div id="pan-medium" style="display:none"></div>
   <div id="pan-subjects" style="display:none"></div>
   <div id="pan-units" style="display:none"></div>
   <div class="bg" id="pan-books" style="display:none"></div>
@@ -318,6 +319,17 @@
             </select>
           </div>
           <div class="fg"><label>Subject</label><input type="text" id="bk-su" placeholder="Physics, Business Law..."></div>
+        </div>
+        <div class="fg" id="fg-medium-row">
+          <label>Medium (UG/PG ke liye)</label>
+          <div style="display:flex;gap:1rem;margin-top:.5rem;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.9rem;font-weight:700;padding:.5rem 1rem;border:2px solid var(--cr-d);border-radius:10px;flex:1;justify-content:center" id="med-hindi-lbl">
+              <input type="radio" name="medium" value="Hindi" checked onchange="onMediumChange()"> 🇮🇳 हिंदी माध्यम
+            </label>
+            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.9rem;font-weight:700;padding:.5rem 1rem;border:2px solid var(--cr-d);border-radius:10px;flex:1;justify-content:center" id="med-english-lbl">
+              <input type="radio" name="medium" value="English" onchange="onMediumChange()"> 🇬🇧 English Medium
+            </label>
+          </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
           <div class="fg"><label>Unit Number</label>
@@ -431,9 +443,9 @@
 </main>
 
 <footer>
-  <p>© 2026 <strong>PDSU Digital Library</strong> — Pandit Deendayal Upadhyaya Shekhawati University<br>
+  <p>© 2026 <strong>अपनी LIBRARY</strong> — Pandit Deendayal Upadhyaya Shekhawati University<br>
   Powered by Firebase | Developer: Giriraj Pareek<br>
-  📱 Help: <a href="https://t.me/PdusuLibraryHelpline" target="_blank" rel="noopener">@PdusuLibraryHelpline</a> on Telegram</p>
+  📱 Help: <a href="https://t.me/APNILIBRARYHELPLINE" target="_blank" rel="noopener">@APNILIBRARYHELPLINE</a> on Telegram</p>
 </footer>
 
 <div id="pay-modal" style="display:none"></div>
