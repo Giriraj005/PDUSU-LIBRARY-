@@ -476,7 +476,61 @@ main{max-width:1280px;margin:0 auto;padding:2.5rem 2rem}
 .clear-dismissals-btn.visible{display:block}
 .yt-free-chip{display:inline-flex;align-items:center;gap:.2rem;background:linear-gradient(135deg,#CC0000,#880000);color:#fff;font-size:.6rem;font-weight:700;padding:.18rem .55rem;border-radius:100px}
 
-/* TOAST */
+/* SCREENSHOT — MANDATORY */
+.ss-mandatory{border:2px solid var(--sf);border-radius:12px;padding:.85rem;background:var(--sf-l);margin-bottom:.9rem}
+.ss-required-badge{display:inline-flex;align-items:center;background:var(--rd);color:#fff;font-size:.58rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:.15rem .5rem;border-radius:100px;margin-left:.4rem;vertical-align:middle}
+.ss-mandatory-hint{font-size:.68rem;color:var(--sf-d);font-weight:700;margin:.2rem 0 .55rem;display:flex;align-items:center;gap:.3rem}
+.ss-mandatory .ss-dz{border-color:var(--sf);border-style:dashed}
+.ss-mandatory .ss-dz:hover{border-color:var(--sf-d);background:#fff}
+body.dark .ss-mandatory{background:#2A1200;border-color:var(--sf)}
+body.dark .ss-mandatory-hint{color:var(--gd-l)}
+
+/* ADMIN SCREENSHOT THUMBNAIL */
+.pc-ss{margin-top:.5rem}
+.pc-ss-thumb{display:block;max-width:220px;max-height:130px;border-radius:10px;border:2px solid var(--gn);cursor:pointer;object-fit:cover;transition:transform .2s,box-shadow .2s;margin-top:.3rem}
+.pc-ss-thumb:hover{transform:scale(1.03);box-shadow:0 8px 25px rgba(0,0,0,.25)}
+body.dark .pc-ss-thumb{border-color:var(--gn)}
+/* ADMIN EARNINGS STATS */
+.adm-stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.85rem;margin-bottom:1.5rem}
+.adm-stat-card{border-radius:16px;padding:1.1rem 1.2rem;display:flex;align-items:center;gap:.85rem;border:1.5px solid transparent;transition:transform .2s}
+.adm-stat-card:hover{transform:translateY(-2px)}
+.adm-stat-earn{background:linear-gradient(135deg,#FFF0D0,#FFE0A0);border-color:#D4A017}
+.adm-stat-ok{background:linear-gradient(135deg,#E8F5EE,#C8EAD4);border-color:#1A7A40}
+.adm-stat-pend{background:linear-gradient(135deg,#FFF8E0,#FFE8A0);border-color:#B8880A}
+.adm-stat-bk{background:linear-gradient(135deg,#EEF2FF,#D8E4FF);border-color:#1A4A9A}
+.adm-stat-icon{font-size:1.8rem;flex-shrink:0;line-height:1}
+.adm-stat-label{font-size:.63rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--gy);margin-bottom:.15rem}
+.adm-stat-val{font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:900;color:var(--ink);line-height:1}
+body.dark .adm-stat-earn{background:linear-gradient(135deg,#2A1A00,#3A2800);border-color:#8A6010}
+body.dark .adm-stat-ok{background:linear-gradient(135deg,#0A1F10,#152A18);border-color:#1A5A30}
+body.dark .adm-stat-pend{background:linear-gradient(135deg,#2A2000,#3A2A00);border-color:#8A6800}
+body.dark .adm-stat-bk{background:linear-gradient(135deg,#0A1030,#151A40);border-color:#1A3080}
+body.dark .adm-stat-val{color:var(--ink)}
+
+/* UPI APP BUTTONS */
+.upi-apps-label{font-size:.65rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--gy);margin-bottom:.5rem;text-align:center}
+.upi-apps-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;margin-bottom:.65rem}
+.upi-app-btn{display:flex;flex-direction:column;align-items:center;gap:.3rem;padding:.6rem .3rem;background:#fff;border:2px solid var(--cr-d);border-radius:12px;text-decoration:none;cursor:pointer;transition:all .2s;-webkit-tap-highlight-color:transparent}
+.upi-app-btn:hover,.upi-app-btn:active{border-color:var(--sf);background:var(--sf-l);transform:scale(1.04)}
+.upi-app-btn img{width:32px;height:32px;object-fit:contain;border-radius:8px}
+.upi-app-btn span{font-size:.62rem;font-weight:700;color:var(--ink-m);text-align:center;line-height:1.2}
+.upi-app-any{background:linear-gradient(135deg,var(--sf-l),#fff);border-color:var(--sf)}
+body.dark .upi-app-btn{background:#231815;border-color:#3A2820}
+body.dark .upi-app-btn span{color:var(--ink-m)}
+
+/* PAYMENT STEPS GUIDE */
+.pay-steps{background:var(--cr);border:1.5px solid var(--cr-d);border-radius:12px;padding:.75rem 1rem;margin-bottom:.9rem;display:flex;flex-direction:column;gap:.5rem}
+.pay-step{display:flex;align-items:flex-start;gap:.6rem;font-size:.76rem;color:var(--ink-m);line-height:1.4}
+.pay-step-num{width:20px;height:20px;border-radius:50%;background:var(--sf);color:#fff;font-size:.62rem;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:.05rem}
+.pay-step-done .pay-step-num{background:var(--gn)}
+body.dark .pay-steps{background:#231815;border-color:#3A2820}
+
+/* MODAL CLOSE BUTTON */
+.mo-close-btn{position:absolute;top:.85rem;right:.85rem;width:28px;height:28px;border-radius:50%;background:var(--cr-d);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.8rem;font-weight:700;color:var(--gy);transition:all .2s;z-index:10}
+.mo-close-btn:hover{background:var(--rd);color:#fff}
+.mo{position:relative}
+body.dark .mo-close-btn{background:#3A2820;color:var(--gy)}
+
 .toast{position:fixed;bottom:5.5rem;right:1.75rem;background:var(--ink);color:#fff;padding:.85rem 1.3rem;border-radius:12px;font-size:.85rem;font-weight:500;box-shadow:0 8px 30px rgba(0,0,0,.3);z-index:9999;animation:slr .3s ease;max-width:270px;font-family:'DM Sans',sans-serif}
 .toast.ok{background:var(--gn)}
 .toast.err{background:#9B2020}
