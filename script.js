@@ -124,6 +124,15 @@ function nav(v){
   if(v==='library')  renderLib();
   if(v==='my-books') renderMyBooks();
   if(v==='admin')    renderAdmin();
+  if(v==='forgot'){
+    // Reset form state every time forgot page opens
+    const btn=document.getElementById('fp-btn');
+    const suc=document.getElementById('fp-success');
+    const inp=document.getElementById('fp-e');
+    if(btn){ btn.style.display='block'; btn.disabled=false; btn.textContent='📧 Reset Link Bhejo'; }
+    if(suc) suc.style.display='none';
+    if(inp) inp.value='';
+  }
   renderNav();
 }
 
@@ -175,6 +184,29 @@ async function doRegister(){
   b.disabled=0; b.textContent='Account Banao — Free 🎉';
 }
 async function doLogout(){ await window.logoutUser(); nav('home'); toast('Logout ho gaye'); }
+
+async function doForgot(){
+  const e=v('fp-e');
+  const btn=document.getElementById('fp-btn');
+  const suc=document.getElementById('fp-success');
+  if(!e) return toast('Email dalo pehle','err');
+  if(!e.includes('@')) return toast('Valid email dalo','err');
+  btn.disabled=true; btn.textContent='Bhej raha hai...';
+  try{
+    await window.resetPassword(e);
+    btn.style.display='none';
+    suc.style.display='block';
+    toast('✅ Reset link bhej diya! Email check karo','ok');
+  } catch(err){
+    if(err.code==='auth/user-not-found'||err.code==='auth/invalid-email'){
+      toast('❌ Yeh email registered nahi hai!','err');
+    } else {
+      toast('❌ Error: '+( err.message||'Try again'),'err');
+    }
+    btn.disabled=false;
+    btn.textContent='📧 Reset Link Bhejo';
+  }
+}
 
 // ═══════════════════════════════════════════
 //  ACCESS CHECK
