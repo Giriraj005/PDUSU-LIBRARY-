@@ -11,7 +11,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-           signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+           signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import { getFirestore, collection, addDoc, getDocs, getDoc, query,
            where, updateDoc, doc, deleteDoc, writeBatch }
            from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -44,6 +44,7 @@
   window.regUser=(n,e,p)=>createUserWithEmailAndPassword(auth,e,p);
   window.loginUser=(e,p)=>signInWithEmailAndPassword(auth,e,p);
   window.logoutUser=()=>signOut(auth);
+  window.resetPassword=(email)=>sendPasswordResetEmail(auth,email);
   window.uploadBook=async d=>{ await addDoc(collection(db,"books"),d); await loadBooks(); };
   window.updateBook=async(id,d)=>{ await updateDoc(doc(db,"books",id),d); await loadBooks(); };
 
@@ -181,7 +182,35 @@
     <div class="fg"><label>Email</label><input type="email" id="li-e" placeholder="tumhara@email.com"></div>
     <div class="fg"><label>Password</label><input type="password" id="li-p" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="fbtn" id="li-btn" onclick="doLogin()">Login Karo →</button>
+    <div class="asw" style="margin-top:.75rem">
+      <a onclick="nav('forgot')" style="color:var(--gy);font-size:.78rem">🔑 Password bhool gaye?</a>
+    </div>
     <div class="asw">Naye ho? <a onclick="nav('register')">Account Banao</a></div>
+  </div>
+</div>
+
+<!-- FORGOT PASSWORD -->
+<div class="view" id="view-forgot">
+  <div class="aw">
+    <div style="text-align:center;font-size:2.5rem;margin-bottom:.5rem">🔑</div>
+    <h2>Password Reset</h2>
+    <p>Apna registered email dalo — reset link bhej denge</p>
+    <div class="fg">
+      <label>Email Address</label>
+      <input type="email" id="fp-e" placeholder="tumhara@email.com" onkeydown="if(event.key==='Enter')doForgot()">
+    </div>
+    <button class="fbtn" id="fp-btn" onclick="doForgot()">📧 Reset Link Bhejo</button>
+    <div id="fp-success" style="display:none;margin-top:1rem;padding:1rem;background:var(--gn-l);border:1.5px solid #7EC8A0;border-radius:12px;text-align:center">
+      <div style="font-size:1.5rem;margin-bottom:.3rem">✅</div>
+      <div style="font-weight:700;color:var(--gn);font-size:.9rem">Reset link bhej diya!</div>
+      <div style="font-size:.75rem;color:var(--ink-m);margin-top:.3rem;line-height:1.5">
+        Email check karo (Spam folder bhi dekho)<br>
+        Link se naya password set karo
+      </div>
+    </div>
+    <div class="asw" style="margin-top:1rem">
+      <a onclick="nav('login')">← Wapas Login par</a>
+    </div>
   </div>
 </div>
 
